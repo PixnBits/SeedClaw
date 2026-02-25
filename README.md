@@ -13,21 +13,7 @@ We want a local agent platform that's:
 ## How to get started (in 5 minutes)
 1. **Build the seed binary**  
 
-   ```bash
-   # Clone this repo  
-   git clone https://github.com/yourname/seedclaw-recipes  
-   cd seedclaw-recipes  
-
-   Write a minimal Go file (or copy from below)  
-   cat <<EOF > seedclaw.go  
-   package main  
-   import "fmt"  
-   func main() { fmt.Println("SeedClaw v1 – paste bootstrap prompt now") }  
-   EOF  
-
-   Build it (you'll replace this later with real code)  
-   go build -o seedclaw  
-   ```
+   Use a coding agent (Copilot/Claude/etc.) with bootstrap-prompt.md to generate seedclaw.go, referencing PRD.md + ARCHITECTURE.md.
    _(Pro tip: the real seed binary will be ~10KB—WebSocket + Docker client + LLM wrapper. But start dumb.)_
 
 2. **Run it**
