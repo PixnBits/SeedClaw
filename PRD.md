@@ -5,7 +5,7 @@
 
 ## 1. Overview & Mission
 SeedClaw is a **minimal, local-first, self-bootstrapping AI agent platform**.  
-Users run one small Go binary they compile themselves → feed it a prompt → the system uses an LLM to generate, compile (in sandbox), test, and register its own extensions ("skills").  
+Users compile one small Go binary themselves → feed it a prompt → the system uses an LLM to generate, compile (in sandbox), test, and register its own extensions ("skills").  
 No cloud dependency, no pre-built binaries in the repo, no vendor lock-in. Everything after the seed is emergent and AI-generated.
 
 Core tagline: "Bootstrap your own paranoid agent swarm from markdown prompts only."
@@ -31,6 +31,15 @@ The seed binary (seedclaw) is the **only trusted component**. It must:
 - Register successful skills in-memory (or to file): map of name → {prompt_template, binary_path}.
 - Execute registered skills on future user requests, always in fresh sandbox.
 - Log all actions immutably (stdout + optional audit file).
+
+## 3.5 Bootstrap Success Checklist (seed binary must pass these)
+- Accepts prompt via stdin (Telegram bonus)
+- Makes real HTTP call to local Ollama (or API fallback)
+- Parses JSON {code, binary_name, hash}
+- Compiles + runs `go vet` + executes binary inside Docker (two containers)
+- Applies full sandbox flags (readonly, network=none, cap-drop=ALL, cgroup limits)
+- Registers skill and confirms via reply
+- Compiles cleanly with `go build -ldflags="-s -w"`
 
 ## 4. Non-Goals (MVP)
 - Multi-user support.

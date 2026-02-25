@@ -53,6 +53,26 @@ SeedClaw is a **self-hosting, local-first AI agent platform** designed from the 
   - Run in their own Docker sandbox per invocation  
   - Communicate back to seed via stdout / structured output
 
+## Bootstrap Flow (Mermaid)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Seed
+    participant LLM
+    participant Docker
+    User->>Seed: paste bootstrap prompt
+    Seed->>LLM: full prompt + safety rules
+    LLM-->>Seed: JSON {code, binary_name, hash}
+    Seed->>Docker: Container 1 (compile + go vet)
+    Docker-->>Seed: success / binary
+    Seed->>Docker: Container 2 (run binary + test)
+    Docker-->>Seed: test output
+    Seed->>User: "Registered CodeSkill"
+```
+
+Use this exact flow in generated code.
+
 - **Sandbox Options (evolution path)**  
   | Level       | Isolation                  | Attack Surface                  | Overhead     | When to Use                          |
   |-------------|----------------------------|----------------------------------|--------------|--------------------------------------|

@@ -10,31 +10,37 @@ We want a local agent platform that's:
 - Bootstrapped from prompts—nothing pre-installed.  
 - Open-source, forkable, and paranoid by design.
 
-## How to get started (in 5 minutes)
-1. **Build the seed binary**  
+## How to get started (in 10–20 minutes)
+1. **Generate the seed binary**  
+   Use a coding agent (Cursor, Claude Projects, GitHub Copilot, Aider, Continue.dev, etc.):  
+   - Clone this repo: `git clone https://github.com/PixnBits/SeedClaw`  
+   - Paste the entire contents of **bootstrap-prompt.md** into your coding agent.  
+   - Let it generate the full Go project (go.mod, seedclaw.go, .env.example) by referencing PRD.md + ARCHITECTURE.md.  
+   - Save the files, run `go mod tidy`, then `go build -o seedclaw`.
 
-   Use a coding agent (Copilot/Claude/etc.) with bootstrap-prompt.md to generate seedclaw.go, referencing PRD.md + ARCHITECTURE.md.
-   _(Pro tip: the real seed binary will be ~10KB—WebSocket + Docker client + LLM wrapper. But start dumb.)_
-
-2. **Run it**
+2. **Run it**  
    ```bash
    ./seedclaw --start
    ```
-   It'll spin up a WebSocket server + Telegram bot (configure your token in .env).
 
-4. **Bootstrap**  
-   Copy-paste the entire contents of ./bootstrap-prompt.md into chat.  
+   (It should listen on stdin; later skills can add Telegram/WebSocket.)
+
+3. **Bootstrap**  
+   Copy-paste the entire contents of ./codeskill-prompt.md into chat.  
    Watch it generate CodeSkill—your first coding agent.
 
-5. **Grow it**  
+4. **Grow it**  
    Say: "CodeSkill: add a git tool" → it writes, compiles, registers.  
    Repeat forever. Email? Browser? Calendar? All from code-gen.
 
 ## Files in this repo
-- ./bootstrap-prompt.md – Your first message.  
-- ./codeskill-prompt.md – What the agent thinks with.  
+- README.md
+- PRD.md – Product Requirements Document
+- ARCHITECTURE.md – Design, threat model, sandbox options
+- bootstrap-prompt.md – Prompt to feed to your coding agent
+- codeskill-prompt.md – What the agent thinks with.  
 
-That's it. No dependencies, no binaries—just prompts.
+That's it. No dependencies, no binaries—just prompts and specs.
 
 ## Security mantra
 - Everything outside this binary is hostile.  
