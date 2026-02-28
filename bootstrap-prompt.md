@@ -21,7 +21,10 @@ Strictly follow:
 3. If no matching skill (or bootstrap mode), forward full input to local LLM → parse JSON → sandbox compile/test/register.
 4. In-memory registry: map[string]Skill {Name, PromptTemplate, BinaryPath, Hash, DelegateFunc}.
 5. On registration success: update registry, print "SUCCESS: Skill 'X' registered\nPath: ...\nHash: ...\nDelegating future calls to /tmp/skills/X"
-6. LLM calls: use minimal http.Client to Ollama (default localhost:11434) **only during bootstrap**. Once OllamaSkill or LLMSelectorSkill registers, delegate all future LLM calls to it (update a global llmCaller func).
+6. LLM calls: use minimal http.Client to Ollama (default localhost:11434) **only during bootstrap**.  
+Default model: `qwen2.5-coder:32b` (or user env OLLAMA_MODEL).  
+Strongly prefer code-specialized models like qwen2.5-coder for generation tasks.  
+Once OllamaSkill or LLMSelectorSkill registers, delegate all future LLM calls to it (update a global llmCaller func).
 7. Retry logic: up to 3× on parse/compile/vet failure (append error to next LLM prompt).
 8. Verbose stdout logging at every step.
 9. Security: context timeouts, Network=none, ReadonlyRootfs=true, CapDrop=ALL, user=nobody in containers.
@@ -53,5 +56,7 @@ Strictly follow:
 - Include --start / --help flags.
 - Add .env.example for OLLAMA_URL, OLLAMA_MODEL, etc.
 - Output: go.mod + main.go (seedclaw.go) content.
+- Recommend users pull `ollama pull qwen2.5-coder:32b` (or q5_K_M quantized variant if VRAM-limited) for best code generation quality in CodeSkill loops.
+- Include fallback to llama3.2:latest if model not found.
 
 Generate the complete project now.

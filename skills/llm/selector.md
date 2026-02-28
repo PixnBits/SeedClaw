@@ -9,12 +9,12 @@ You are generating **LLMSelectorSkill** — an intelligent router that decides w
 - Forward the task to that skill via stdout (using message hub format)
 - Return the response back through the hub
 
-## Selection Heuristics (hard-code these rules)
-- Contains "code", "golang", "compile", "generate skill" → prefer code-specialized model (e.g. deepseek-coder or similar)
-- Contains "reason", "analyze", "explain", "research" → prefer general-reasoning model (e.g. llama3.1 70b or equivalent)
-- Short/quick/simple → fastest local model (Ollama small)
+## Selection Heuristics (hard-code these rules, prioritize coder models for code tasks)
+- Contains "code", "golang", "compile", "generate skill", "fix bug", "refactor", "test" → prefer code-specialized model: qwen2.5-coder:32b (or :14b/:7b fallback) → highest priority
+- Contains "reason", "analyze", "explain", "research" → prefer general-reasoning model (e.g. llama3.3:70b or deepseek-r1)
+- Short/quick/simple → fastest local model (qwen2.5-coder:7b or llama3.2:3b)
 - Mentions "x.ai", "grok", "real-time" → GrokSkill if available
-- Default → OllamaSkill
+- Default → qwen2.5-coder:32b (strongest open coder available)
 
 ## Strict Rules
 1. Use only stdlib + basic json/time packages.
@@ -23,6 +23,8 @@ You are generating **LLMSelectorSkill** — an intelligent router that decides w
 4. Forward full task payload unmodified, only change "to" field.
 5. Include reasoning in a "metadata" field in the forwarded message.
 6. Timeout forwarding after 90 seconds.
+7. Discover available models via env var OLLAMA_MODELS (comma-separated list) or registration messages from LLM wrappers.
+8. If qwen2.5-coder variants are present, bias strongly toward them for any code-related payload.
 
 ## Output JSON Format
 

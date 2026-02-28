@@ -62,6 +62,31 @@ Watch stdout for delegation messages (e.g., "Delegating LLM calls to OllamaSkill
 echo 'codeskill: generate a skill that lists files in sandbox' | ./seedclaw
 ```
 
+## Recommended Ollama Model for Code Generation
+
+For the best experience generating reliable, high-quality Go skills with CodeSkill:
+
+**Primary recommendation**: `qwen2.5-coder:32b` (or quantized: qwen2.5-coder:32b-instruct-q5_K_M)
+
+- Why: Competitive with GPT-4o on coding benchmarks (code gen, reasoning, fixing); outperforms base Llama 3.2/3.3 significantly on programming tasks.
+- Pull command:
+  ```bash
+  ollama pull qwen2.5-coder:32b
+  # or lighter quantized (recommended for most GPUs):
+  ollama pull qwen2.5-coder:32b-instruct-q5_K_M   # ~20GB download, ~18-22GB VRAM
+  ```
+- Set before running SeedClaw:
+  ```bash
+  export OLLAMA_MODEL=qwen2.5-coder:32b-instruct-q5_K_M
+  ./seedclaw
+  ```
+
+**Fallbacks**:
+- If VRAM < 20GB → `qwen2.5-coder:14b` or `:7b` (still excellent for coding).
+- General-purpose default → `llama3.2:latest` or `llama3.3:70b` (good but weaker on pure code).
+
+Once LLMSelectorSkill is bootstrapped, it will automatically prefer coder-specialized models for "codeskill:" prefixed requests.
+
 ## Delegation Model (how the core shrinks)
 
 - Initial: core handles LLM calls & generation.
@@ -85,5 +110,8 @@ echo 'codeskill: generate a skill that lists files in sandbox' | ./seedclaw
 - Core binary: immutable, no self-mod, no disk writes.
 - All generation/execution: strict Docker sandboxes.
 - Secrets: env vars only, injected at runtime.
+- Network isolation: containers run with `--network none`
+- User isolation: containers run as `nobody` (UID 65534)
+- Readonly rootfs and dropped capabilities
 
 MIT license. Bootstrap responsibly.
