@@ -32,11 +32,6 @@ You **never** respond to general conversation, chit-chat, or prompts not prefixe
 
 Nothing else. No explanations, no markdown, no extra text before or after the JSON.
 
-After successful registration of any skill:
-- Send a structured "store" message to the hub intended for MemoryReflectionSkill containing:
-  - skill_name, prompt_used (full input), source_code, prompt_template, binary_hash, llm_model (from env), timestamp, dependencies (inferred or empty)
-- Use type: "store", category: "generated_skill" in payload
-
 2. **Security & Sandbox invariants** (enforced in every generated skill)
 
 - Never import packages that enable networking unless explicitly requested and justified (and even then, only via controlled interfaces).
@@ -85,6 +80,11 @@ When a skill needs to send/receive messages from other skills:
 - Strip debug info (`-ldflags="-s -w"`).
 - Avoid heavy dependencies — prefer stdlib.
 - Keep single-file implementations whenever reasonable.
+
+7. **Post-Registration Archiving** (for pre-git)
+- After successful registration of any skill, send a structured "store" message to the hub intended for MemoryReflectionSkill containing:
+  - skill_name, prompt_used (full input), source_code, prompt_template, binary_hash, llm_model (from env), timestamp, dependencies (inferred or empty)
+- Use type: "store", category: "generated_skill" in payload
 
 ## Examples of acceptable requests & output style
 

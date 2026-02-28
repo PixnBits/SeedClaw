@@ -48,7 +48,12 @@ The seed binary starts in a minimal state and reaches a **self-sufficient end st
   - MessageHubSkill (pub/sub router via JSON-lines stdin/stdout)
   - LLMSelectorSkill (routes prompts to best LLM based on task type/metadata)
   - One or more per-LLM wrapper skills (OllamaSkill, GrokSkill, etc.) with secret isolation
-  - Utility skills (file I/O, git, shell-in-sandbox, etc.)
+  - MemoryReflectionSkill (memory + reflection; pre-git archive)
+  - PlannerSkill (task decomposition)
+  - CriticSkill (verification/critique)
+  - RetryOrchestratorSkill (failure recovery)
+  - SelfModSkill (meta-evolution)
+  - GitSkill (local VCS; bulk commits pre-git archive from memory)
 - Skills can compose via structured messages through the hub.
 - Every generation attempt passes:
   - Compilation
@@ -58,6 +63,11 @@ The seed binary starts in a minimal state and reaches a **self-sufficient end st
 - Total bootstrap-to-useful-swarm time: ideally < 10 minutes with a capable local LLM.
 
 If any step fails repeatedly, the seed provides clear stdout diagnostics and allows retry via re-pasting a refined prompt.
+
+## Pre-Git Archiving Flow
+- CodeSkill generates skill → sends "store" to MemoryReflectionSkill with full metadata (source, prompt, hash, etc.)
+- MemoryReflectionSkill archives in memory (opt-in file append)
+- After GitSkill registers: SelfModSkill or PlannerSkill triggers batch retrieve from memory → sends to GitSkill for bulk commit
 
 ## Core Components
 
@@ -99,7 +109,7 @@ If any step fails repeatedly, the seed provides clear stdout diagnostics and all
 ## Evolution & Non-Goals
 
 Non-goals (by design):
-- Persistent memory / long-term state
+- Persistent memory / long-term state across runs
 - Multi-user / authentication
 - Cloud coordination
 - GUI / web interface

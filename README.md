@@ -50,7 +50,7 @@ cat skills/recovery/retry-orchestrator.md | ./seedclaw
 cat skills/evolution/self-mod.md       | ./seedclaw
 
 # 5. Version control (commits pre-git skills from memory)
-# (add skills/sdlc/git.md when ready)
+cat skills/sdlc/git.md | ./seedclaw
 ```
 
 Watch stdout for delegation messages (e.g., "Delegating LLM calls to OllamaSkill").
@@ -65,7 +65,7 @@ echo 'codeskill: generate a skill that lists files in sandbox' | ./seedclaw
 ## Delegation Model (how the core shrinks)
 
 - Initial: core handles LLM calls & generation.
-- After registration: core delegates to skills (e.g., LLMSelectorSkill, CodeSkill).
+- After after registration: core delegates to skills (e.g., LLMSelectorSkill, CodeSkill).
 - Core stays immutable & minimal — only routes and registers.
 
 ## Recommended Order Recap
@@ -73,12 +73,12 @@ echo 'codeskill: generate a skill that lists files in sandbox' | ./seedclaw
 1. CodeSkill
 2. MessageHubSkill
 3. LLMSelectorSkill + OllamaSkill
-4. MemoryReflectionSkill (stores generations)
+4. MemoryReflectionSkill (stores generations for pre-git archive)
 5. PlannerSkill
 6. CriticSkill
 7. RetryOrchestratorSkill
 8. SelfModSkill
-9. GitSkill (bulk commit from memory)
+9. GitSkill (bulk commit from memory archive)
 
 ## Security Notes
 

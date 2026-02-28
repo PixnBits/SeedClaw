@@ -51,7 +51,13 @@ These should be generatable in the first 5–15 minutes after CodeSkill is live:
 | 3        | LLMSelectorSkill      | Routes prompts to best LLM based on task type, model traits, heuristics | Uses message hub; reads env/config for available LLMs |
 | 4        | OllamaSkill (wrapper) | Direct localhost Ollama caller; secrets via env only                    | Template for per-LLM wrappers                     |
 | 5–N      | GrokSkill / OtherLLMSkill | Similar wrappers for remote APIs (keys via env)                     | Secret isolation enforced                         |
-| Bonus    | FileSkill, GitSkill, ShellSandboxSkill, etc. | Basic local utilities in strict sandboxes                  | Generated after orchestration basics are solid    |
+| 5        | MemoryReflectionSkill | Memory storage/retrieval + reflection; pre-git skill archive           | Stores generations for later git handoff          |
+| 6        | PlannerSkill          | Task decomposition, planning, re-planning                              | Unlocks complex multi-step goals                  |
+| 7        | CriticSkill           | Output verification, critique, quality scoring                         | Boosts reliability via self-critique              |
+| 8        | RetryOrchestratorSkill| Failure monitoring, retries, refinements                               | Adds resilience to the swarm                      |
+| 9        | SelfModSkill          | Meta-evolution: propose prompt/skill improvements                      | Enables recursive self-improvement                |
+| 10       | GitSkill              | Local git for tracking generated skills; bulk commit from memory       | Commits pre-git archive; enables SDLC             |
+| Bonus    | FileSkill, etc.       | Basic local utilities in strict sandboxes                              | Generated after orchestration basics are solid    |
 
 ### 3.4 Skill Generation & Validation Requirements
 Every generated skill must:
@@ -75,8 +81,9 @@ Every generated skill must:
 3. Test: `codeskill: generate a skill that acts as a message hub`
 4. Test: `codeskill: create an LLM selector skill`
 5. Test: `codeskill: generate Ollama wrapper skill`
-6. Verify chaining: send message through hub → selector → OllamaSkill
-7. Iterate: ask for more utilities
+6. Continue through MemoryReflectionSkill → GitSkill
+7. Verify chaining: send message through hub → selector → OllamaSkill
+8. Iterate: ask for more utilities
 
 ### 3.7 Success Metrics (Observables)
 - Bootstrap to CodeSkill: < 5 min, < 3 LLM calls
@@ -84,6 +91,7 @@ Every generated skill must:
 - End-to-end skill generation success rate: ≥ 80% on first or second attempt
 - No security violations logged (unsafe patterns, network leaks, secret exposure)
 - Swarm of 5+ skills achievable in < 30 min of interactive prompting
+- Pre-git to git handoff: bulk commit succeeds after GitSkill registration
 
 ### 3.8 Guiding Principles Recap
 - Emergent growth via natural language only
