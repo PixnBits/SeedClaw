@@ -1,65 +1,95 @@
 # SeedClaw Product Requirements Document (PRD)
 
-**Version:** 1.0-draft (2026-02-25)  
-**Status:** Bootstrap phase – focus on self-initialization
+SeedClaw is a **tiny, paranoid, local-first, self-bootstrapping agent system** that starts from a single small Go binary and grows — entirely through natural language prompts — into a swarm of sandboxed, composable skills.
 
-## 1. Overview & Mission
-SeedClaw is a **minimal, local-first, self-bootstrapping AI agent platform**.  
-Users compile one small Go binary themselves → feed it a prompt → the system uses an LLM to generate, compile (in sandbox), test, and register its own extensions ("skills").  
-No cloud dependency, no pre-built binaries in the repo, no vendor lock-in. Everything after the seed is emergent and AI-generated.
+## 1. Core Product Goal
 
-Core tagline: "Bootstrap your own paranoid agent swarm from markdown prompts only."
+A user with a local LLM (e.g. Ollama) should be able to:
+1. Run a ~20–80 KB seed binary.
+2. Paste one bootstrap prompt.
+3. Within minutes reach a **self-sufficient coding agent** capable of reliably generating, vetting, testing, and registering new skills.
+4. Iteratively grow that agent into a small swarm of interoperable skills — all without writing or committing any agent code.
 
-## 2. Key Requirements & Constraints
-- **Local-only execution** — runs on user machine (Mac/Windows/Linux, x86/arm).
-- **LLM integration** — prefer local (Ollama, LM Studio, llama.cpp); fallback to API (Claude, Grok, OpenAI, etc.) via env var config.
-- **Chat input** — at minimum stdin/stdout loop; nice-to-have: Telegram bot (via BOT_TOKEN env), WebSocket server.
-- **Sandbox mandatory** — every code gen, compile, test, and skill execution in isolated environment (Docker default; gVisor/Firecracker future).
-- **No persistent external state** (except optional ~/.seedclaw/ for skill registry and audit logs).
-- **Security paranoia** — treat all LLM output as hostile; static analysis + strict sandboxing.
-- **Repo purity** — this repo contains **only markdown** (prompts, docs). Users generate seedclaw.go themselves.
+## 2. Non-Goals (Explicit Exclusions)
 
-## 3. MVP Scope (what the initial seed binary must do)
-The seed binary (seedclaw) is the **only trusted component**. It must:
-- Accept user prompts (stdin at minimum; Telegram/WebSocket preferred).
-- Call an LLM with a structured prompt + context.
-- Parse structured output from LLM (e.g. JSON: {code: string, binary_name: string, hash: string}).
-- Spawn Docker container to:
-  - Compile generated Go code (using alpine + golang image or local toolchain).
-  - Run go vet / basic lint.
-  - Test with simple "hello world" invocation.
-- Register successful skills in-memory (or to file): map of name → {prompt_template, binary_path}.
-- Execute registered skills on future user requests, always in fresh sandbox.
-- Log all actions immutably (stdout + optional audit file).
+- Persistent memory or long-term state across runs
+- Multi-user support or authentication
+- Cloud coordination, APIs, or remote execution
+- GUI, web UI, or rich frontend
+- Package managers, dependency graphs, or versioned skill releases
+- Hand-written agent logic beyond the initial seed
 
-## 3.5 Bootstrap Success Checklist (seed binary must pass these)
-- Accepts prompt via stdin (Telegram bonus)
-- Makes real HTTP call to local Ollama (or API fallback)
-- Parses JSON {code, binary_name, hash}
-- Compiles + runs `go vet` + executes binary inside Docker (two containers)
-- Applies full sandbox flags (readonly, network=none, cap-drop=ALL, cgroup limits)
-- Registers skill and confirms via reply
-- Compiles cleanly with `go build -ldflags="-s -w"`
+## 3. Key Requirements
 
-## 4. Non-Goals (MVP)
-- Multi-user support.
-- GUI / web UI.
-- Built-in multi-agent orchestration.
-- Cloud hosting / deployment.
-- Skill revocation / versioning (add later via generated skills).
+### 3.1 Seed Binary
+- Single statically-linked Go binary
+- Dependencies limited to stdlib + official Docker Go client (`github.com/docker/docker/client`)
+- Accepts commands via stdin, emits feedback & results via stdout
+- Uses programmatic Docker SDK (no shell `docker` exec)
+- Enforces strict sandbox defaults on every container:
+  - Network: none
+  - Readonly rootfs
+  - Drop all capabilities
+  - Run as nobody / UID 65534
+  - 30–60s timeouts
+- Verbose, structured progress messages on stdout
 
-## 5. Dependencies (minimal)
-- Go stdlib only where possible.
-- External: docker client lib (github.com/docker/docker/client), websocket or telegram lib if chosen.
-- LLM client: ollama-go or openai-compatible lib (configurable).
+### 3.2 Bootstrap Success Criteria
+The system reaches “minimal viable agent” when:
+- CodeSkill is registered and responds correctly to "codeskill: …" commands
+- Generation loop succeeds ≥ 80% of the time on first or second LLM try
+- Each new skill passes: compile → vet → basic test → hash → register
+- Total time from `./seedclaw` to usable CodeSkill: ideally < 5 min
 
-## 6. Success Criteria for Bootstrap
-User can:
-1. Generate/compile seedclaw.go (using this PRD + ARCHITECTURE.md + bootstrap-prompt.md in a coding agent).
-2. Run `./seedclaw --start`.
-3. Paste bootstrap-prompt.md content into the interface.
-4. Receive a working "CodeSkill" that can then generate further skills.
+### 3.3 Foundational Skills (Bootstrapping Targets)
+These should be generatable in the first 5–15 minutes after CodeSkill is live:
 
-See ARCHITECTURE.md for detailed design, threat model, and sandbox evolution path.
+| Priority | Skill Name            | Purpose                                                                 | Dependencies / Notes                              |
+|----------|-----------------------|-------------------------------------------------------------------------|---------------------------------------------------|
+| 1        | CodeSkill             | Generates, compiles, vets, tests, registers new skills                  | Must exist first (bootstrap target)               |
+| 2        | MessageHubSkill       | Pub/sub router using JSON-lines stdin/stdout; enables skill composition | Mandatory inter-skill messaging envelope          |
+| 3        | LLMSelectorSkill      | Routes prompts to best LLM based on task type, model traits, heuristics | Uses message hub; reads env/config for available LLMs |
+| 4        | OllamaSkill (wrapper) | Direct localhost Ollama caller; secrets via env only                    | Template for per-LLM wrappers                     |
+| 5–N      | GrokSkill / OtherLLMSkill | Similar wrappers for remote APIs (keys via env)                     | Secret isolation enforced                         |
+| Bonus    | FileSkill, GitSkill, ShellSandboxSkill, etc. | Basic local utilities in strict sandboxes                  | Generated after orchestration basics are solid    |
 
-Contributions: Improve this PRD, ARCHITECTURE.md, or the prompts via PR.
+### 3.4 Skill Generation & Validation Requirements
+Every generated skill must:
+- Be single-file Go (when reasonable)
+- Use Go 1.22+ stdlib preferentially
+- Include `_test.go` file with at least basic tests whenever logic is non-trivial
+- Follow inter-skill messaging standard (JSON envelope over stdin/stdout)
+- Never hard-code secrets — accept only via environment variables
+- Pass static analysis (go vet minimum; golangci-lint preferred if available in sandbox)
+- Be hashed (SHA256) and registered only on full success
+
+### 3.5 Testing Strategy
+- CodeSkill must generate unit tests alongside production code when possible
+- Seed runs `go test` (or custom test command) in isolated container before registration
+- Tests use only standard `testing` package
+- Failure in tests → full retry loop with error feedback to LLM
+
+### 3.6 User Success Checklist (communicated in README & stdout)
+1. Run seed binary
+2. Paste bootstrap prompt → see "CodeSkill registered"
+3. Test: `codeskill: generate a skill that acts as a message hub`
+4. Test: `codeskill: create an LLM selector skill`
+5. Test: `codeskill: generate Ollama wrapper skill`
+6. Verify chaining: send message through hub → selector → OllamaSkill
+7. Iterate: ask for more utilities
+
+### 3.7 Success Metrics (Observables)
+- Bootstrap to CodeSkill: < 5 min, < 3 LLM calls
+- First additional skill (e.g. MessageHub): < 3 min after CodeSkill live
+- End-to-end skill generation success rate: ≥ 80% on first or second attempt
+- No security violations logged (unsafe patterns, network leaks, secret exposure)
+- Swarm of 5+ skills achievable in < 30 min of interactive prompting
+
+### 3.8 Guiding Principles Recap
+- Emergent growth via natural language only
+- Paranoia > convenience
+- Local compute only (Ollama default)
+- Ephemeral everything
+- Sandbox first, always
+
+This PRD defines the minimal viable path from tiny seed → useful agent swarm. All future capabilities should be generated via CodeSkill or its successors — never added directly to the repository.

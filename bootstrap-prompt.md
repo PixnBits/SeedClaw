@@ -1,119 +1,57 @@
-# SeedClaw Bootstrap Prompt – v1.2 Self-Bootstrapping & Isolation Edition (2026-02-25)
+# SeedClaw Bootstrap Prompt – v1.3 (delegation-focused, minimal core)
 
-Use this prompt **directly** in GitHub Copilot, Cursor, Claude Artifacts, Aider, Continue.dev, or any coding agent to generate the initial Go project.
+Feed this prompt directly into a coding agent (Cursor, Claude, Aider, Continue.dev, etc.) to generate the initial `seedclaw` binary.
 
 **Instructions for the coding agent:**
 
-You are generating the **initial seed binary** for SeedClaw – a self-hosting AI agent platform.  
-Read and strictly follow **all** documents from the repo https://github.com/PixnBits/SeedClaw:
+Generate the **seed binary** for SeedClaw — paranoid, local-first, self-extending agent system.
 
-- PRD.md (MVP scope, bootstrap checklist, constraints)
-- ARCHITECTURE.md (principles, sandbox table, threat model, bootstrap flow)
-- skills/sdlc/coder.md (embed the **exact** text of the section "**Full prompt to paste into the running SeedClaw binary:**" — everything starting from "You are CodeSkill v1.1 ..." to the end — as a raw string constant)
+Strictly follow:
+- https://github.com/PixnBits/SeedClaw/PRD.md
+- https://github.com/PixnBits/SeedClaw/ARCHITECTURE.md
 
-**Core Goal (new in v1.2):**
-Make the seed binary **self-bootstrapping and self-improving**:
-- On `./seedclaw --bootstrap` it automatically generates + compiles + registers **CodeSkill** (the code-generation skill).
-- It then immediately uses the new CodeSkill to generate a sophisticated **LLM invocation skill** (`llm_invoke`).
-- This pulls **all LLM invocation logic out of the trusted seed binary** into sandboxed skills → the seed itself contains only a minimal stdlib HTTP client (used once during bootstrap).
+**Core Philosophy (must obey):**
+- The binary is immutable after generation — never self-modifies on disk.
+- Keep attack surface tiny: stdin/stdout only externally; Docker SDK internally; minimal LLM client for bootstrap only.
+- Delegate everything possible once skills are registered (registry overrides core behavior).
 
-**Strict Generation Rules:**
-- **Dependencies (minimal):** ONLY stdlib + Docker client libs:
-  - github.com/docker/docker/client (latest compatible)
-  - github.com/docker/go-connections/nat (latest)
-  - No go-openai, no other LLM libs in the seed binary.
-- LLM calls in the seed: **only** the one-time bootstrap call, implemented with pure `net/http` + `encoding/json` (support Ollama and OpenAI-compatible endpoints via env vars).
-- Embed the full CodeSkill prompt from `skills/sdlc/coder.md` as:
-  ```go
-  const codeSkillBootstrapPrompt = `You are CodeSkill v1.1 — ... (exact full text from skills/sdlc/coder.md)`
-  ```
-- CLI: support `--bootstrap` (perform full self-bootstrap) and `--start` (normal chat loop, default).
-- If `--bootstrap` (or `--start` with empty registry), run the full self-bootstrap sequence described below.
-- Docker compile step: `go vet ./... && go build -o /out/binary /src/main.go` (stdlib-only → no `go mod tidy` needed for skills in MVP).
-- Sandbox for LLM skills (`codeskill`, `llm_invoke`): `NetworkMode: "bridge"` (or `"host"` for simple localhost Ollama access); all other skills default `network=none`.
-- Skill execution: parse input as `SkillName: args`. Spawn fresh Docker container with the registered binary, pass args via stdin, expect stdout JSON `{result: string, error: string|null}`. If `result` unmarshals to a code-gen struct `{code, binary_name, hash, description}`, automatically compile/register the new skill.
-- After bootstrap, the seed prints a clear success message and can continue into chat mode.
+**Minimal Responsibilities of the Seed Binary:**
+1. Read multi-line input from os.Stdin until EOF (bufio.Scanner or io.ReadAll).
+2. If input starts with "skillname:", route to the registered binary for that skill via sandboxed subprocess (pipe stdin/stdout, capture output).
+3. If no matching skill (or bootstrap mode), forward full input to local LLM → parse JSON → sandbox compile/test/register.
+4. In-memory registry: map[string]Skill {Name, PromptTemplate, BinaryPath, Hash, DelegateFunc}.
+5. On registration success: update registry, print "SUCCESS: Skill 'X' registered\nPath: ...\nHash: ...\nDelegating future calls to /tmp/skills/X"
+6. LLM calls: use minimal http.Client to Ollama (default localhost:11434) **only during bootstrap**. Once OllamaSkill or LLMSelectorSkill registers, delegate all future LLM calls to it (update a global llmCaller func).
+7. Retry logic: up to 3× on parse/compile/vet failure (append error to next LLM prompt).
+8. Verbose stdout logging at every step.
+9. Security: context timeouts, Network=none, ReadonlyRootfs=true, CapDrop=ALL, user=nobody in containers.
 
-**Bootstrap Sequence the seed MUST implement:**
-1. Use minimal stdlib LLM call with:
-   - User message = `codeSkillBootstrapPrompt` + `\n\nInitial bootstrap request: Generate the CodeSkill skill binary now. The "code" must be a complete package-main Go program that:\n- Hardcodes the full CodeSkill prompt logic.\n- Reads request from os.Stdin.\n- Appends it as "User request: " + request.\n- Calls the LLM via stdlib net/http (same env config).\n- Returns exactly {"result": llm_content, "error": null}.\nOutput ONLY valid JSON.`
-2. Parse JSON → compile/register as "codeskill".
-3. Immediately invoke the new "codeskill" skill (via Docker) with request:  
-   `add llm_invoke skill: a sophisticated reusable LLM invocation skill. Read JSON from stdin: {"base_url":string, "api_key":string, "model":string, "messages":[...], "temperature":float}. Use stdlib net/http to call /v1/chat/completions (support headers, retries, basic error handling). Return {"content":string, "full_response":object, "error":null}. binary_name=llm_invoke`
-4. The CodeSkill binary will return the code-gen JSON in its `result` → seed auto-compiles/registers "llm_invoke".
-5. Print: "✅ Self-bootstrap complete! CodeSkill and LLM invocation skill generated. LLM calls are now fully isolated in sandboxed skills. Run with --start to chat."
+**JSON Expected from LLM (strict parse):**
 
-**Example: Minimal stdlib LLM call (include this pattern, adapt exactly):**
-```go
-type ChatMessage struct {
-    Role    string `json:"role"`
-    Content string `json:"content"`
-}
-type ChatRequest struct {
-    Model       string         `json:"model"`
-    Messages    []ChatMessage  `json:"messages"`
-    Temperature float64        `json:"temperature"`
-}
-type ChatChoice struct {
-    Message struct {
-        Content string `json:"content"`
-    } `json:"message"`
-}
-type ChatResponse struct {
-    Choices []ChatChoice `json:"choices"`
-}
-
-func minimalLLMCall(prompt string) (string, error) {
-    baseURL := os.Getenv("LLM_BASE_URL")
-    if baseURL == "" { baseURL = "http://localhost:11434/v1" }
-    model := os.Getenv("LLM_MODEL")
-    if model == "" { model = "llama3.2" } // or whatever default
-    apiKey := os.Getenv("LLM_API_KEY")
-    if apiKey == "" { apiKey = "ollama" }
-
-    reqBody := ChatRequest{
-        Model: model,
-        Messages: []ChatMessage{{Role: "user", Content: prompt}},
-        Temperature: 0.1,
-    }
-    body, _ := json.Marshal(reqBody)
-
-    req, _ := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(body))
-    req.Header.Set("Content-Type", "application/json")
-    if apiKey != "ollama" {
-        req.Header.Set("Authorization", "Bearer "+apiKey)
-    }
-
-    client := &http.Client{Timeout: 120 * time.Second}
-    resp, err := client.Do(req)
-    // ... handle err, read body, unmarshal, return resp.Choices[0].Message.Content
+```json
+{
+  "skill_name": "CodeSkill",
+  "description": "...",
+  "prompt_template": "...",
+  "go_package": "main",
+  "source_code": "...full code...",
+  "binary_name": "codeskill",
+  "build_flags": ["-trimpath", "-ldflags=-s -w"],
+  "tests_included": true,
+  "test_command": "go test -v ./..."
 }
 ```
 
-**Example: Docker sandbox for LLM skills (allow network):**
-```go
-hostConfig := &container.HostConfig{
-    Binds:          []string{fmt.Sprintf("%s:/src:ro", tmpDir)},
-    AutoRemove:     true,
-    ReadonlyRootfs: true,
-    NetworkMode:    container.NetworkMode("bridge"), // or "host" for localhost Ollama
-    CapDrop:        []string{"ALL"},
-    Memory:         512 << 20,
-    NanoCPUs:       1_000_000_000,
-    SecurityOpt:    []string{"seccomp=unconfined"}, // tighten later
-}
-```
+**Delegation Rules (critical):**
+- After any skill registers, check if it can take over core functions (e.g., if skill_name == "OllamaSkill", set llmCaller = func(prompt) { return execSandboxBinary(skill.BinaryPath, prompt) }).
+- Core never writes files or persists state beyond in-memory registry.
+- Use github.com/docker/docker/client (resolve version automatically).
+- Dependencies: stdlib + go-openai (for initial LLM) + docker/client.
 
-**Bootstrap Success Checklist (code must pass ALL):**
-- [ ] Pure stdlib LLM for bootstrap only (no go-openai in seed)
-- [ ] `--bootstrap` flag auto-generates + registers CodeSkill + llm_invoke
-- [ ] CodeSkill prompt fully embedded and used
-- [ ] LLM invocation pulled into sandboxed skills (llm_invoke is sophisticated, network-isolated)
-- [ ] Skills compile/run with correct sandbox (network=bridge for LLM skills)
-- [ ] Prefix parsing "SkillName: args" + auto code-gen detection
-- [ ] Compiles cleanly with `go build -ldflags="-s -w"`
+**Extra Guidance:**
+- Handle large piped inputs (skills/*.md files) robustly.
+- Include --start / --help flags.
+- Add .env.example for OLLAMA_URL, OLLAMA_MODEL, etc.
+- Output: go.mod + main.go (seedclaw.go) content.
 
-**Output format:** One fenced code block per file (`go.mod` first, then `seedclaw.go`, then `.env.example`).  
-Add clear comments: `// See PRD.md section 3`, `// Self-bootstrap for isolation (v1.2)` etc.
-
-This produces a seed binary that truly starts from almost nothing and immediately grows itself with better isolation. Happy bootstrapping — now the swarm can evolve without ever touching the trusted core again!
+Generate the complete project now.

@@ -1,110 +1,110 @@
 # SeedClaw Architecture
 
-**Version:** 1.0-draft (2026-02-25)  
-**Status:** Early conceptual / bootstrap phase
-
-SeedClaw is a **self-hosting, local-first AI agent platform** designed from the ground up to be paranoid, minimal, and emergent. The core idea: ship almost nothing — just markdown prompts — and let the system build and extend itself using AI-generated, sandboxed code.
+SeedClaw is a **minimal, paranoid, local-first, self-extending agent system** designed to bootstrap itself from a tiny Go binary into a capable swarm of sandboxed skills — without ever committing agent code to the repository.
 
 ## Core Principles
 
-1. **Zero-code in the repo** (recipes only)  
-   - No committed `.go` files, no binaries, no dependencies lists.  
-   - Users generate the initial seed binary themselves (via coding agents like Grok, Claude, Copilot, Aider, etc.) or start with a tiny placeholder.  
-   - Everything after the seed is AI-generated and self-registered.
+1. **Zero trust & paranoia first**  
+   - Nothing is trusted by default — not generated code, not LLM output, not even the seed binary after initial run.  
+   - All execution happens in strict, ephemeral sandboxes.  
+   - No persistent storage of any kind (registry is in-memory only).  
+   - No network access unless explicitly requested and sandboxed per skill.
 
-2. **Sandbox-first, not sandbox-later**  
-   - Every tool call, skill execution, and code compilation runs in strict isolation.  
-   - Default: fresh Docker container (alpine base) with:  
-     - Read-only mounts for seed binary  
-     - Ephemeral `/tmp` for writes  
-     - `--network=none` by default  
-     - Dropped capabilities, no root, seccomp strict profile  
-     - cgroup limits (CPU burst, memory cap)  
-     - 30s timeout kill  
+2. **Tiny immutable seed**  
+   - The seed binary (~20–80 KB) is the only compiled artifact in the repo (generated via external agent).  
+   - It never changes after bootstrap; all growth happens via generated & registered skills.
 
-3. **Self-bootstrapping loop**  
-   - Seed binary (tiny Go program) provides:  
-     - Chat input (stdin, WebSocket, or Telegram bot)  
-     - LLM call (local Ollama preferred; API fallback)  
-     - Docker client to spawn sandboxes  
-   - User pastes bootstrap prompt → seed asks LLM to generate "CodeSkill" (first coding agent)  
-   - CodeSkill then generates, compiles (in Docker), tests, and registers new skills  
-   - Repeat: "CodeSkill: add git tool", "add email skill", etc.
+3. **Prompt-driven emergence**  
+   - New capabilities are created by pasting natural-language requests to already-registered skills (starting with CodeSkill).  
+   - No hand-written agent logic beyond the seed.
 
-4. **Trust model**  
-   - Only the initial seed binary is trusted (user-compiled).  
-   - All LLM output, generated code, and skills = untrusted/hostile by default.  
-   - Static analysis (go vet, golangci-lint) + pattern blocks (no `os/exec`, `syscall`, `unsafe`) inside sandbox before compile.  
-   - Binary hashing / self-signing for integrity checks.
+4. **Local-first & offline-capable**  
+   - Default LLM: Ollama running on localhost.  
+   - Optional remote LLMs via per-skill wrappers with runtime-injected secrets (never hard-coded).
 
-## Components
+5. **Sandbox evolution path** (increasing isolation)
 
-- **Seed Binary** (~10-50 KB static Go executable)  
-  Responsibilities:  
-  - Accept user prompts (chat interface)  
-  - Call LLM with structured prompt + context  
-  - Parse LLM response (JSON: {code, binary_name, hash})  
-  - Spawn Docker container → compile → test → register skill  
-  - Maintain in-memory skill registry (name → prompt template + binary path)
+   | Stage       | Executor                  | Isolation Level          | Notes                              |
+   |-------------|---------------------------|--------------------------|------------------------------------|
+   | Current     | Docker (via Go SDK)       | High                     | Network=none, readonly rootfs, no caps |
+   | Next        | gVisor / runsc            | Very High                | Kernel-level sandbox               |
+   | Future      | Firecracker microVM       | Extremely High           | Full VM boundary                   |
+   | Long-term   | WASM + wasi / wasmtime    | High + lightweight       | No container runtime needed        |
 
-- **Skills / Plugins**  
-  - Each skill = compiled Go binary + prompt template (markdown)  
-  - Registered dynamically via CodeSkill  
-  - Run in their own Docker sandbox per invocation  
-  - Communicate back to seed via stdout / structured output
+## Bootstrap Flow & End State
 
-## Bootstrap Flow (Mermaid)
+The seed binary starts in a minimal state and reaches a **self-sufficient end state** through this loop:
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Seed
-    participant LLM
-    participant Docker
-    User->>Seed: paste bootstrap prompt
-    Seed->>LLM: full prompt + safety rules
-    LLM-->>Seed: JSON {code, binary_name, hash}
-    Seed->>Docker: Container 1 (compile + go vet)
-    Docker-->>Seed: success / binary
-    Seed->>Docker: Container 2 (run binary + test)
-    Docker-->>Seed: test output
-    Seed->>User: "Registered CodeSkill"
-```
+1. User runs `./seedclaw` (or equivalent) and pastes the bootstrap prompt (from `bootstrap-prompt.md`).
+2. Seed calls local LLM → receives JSON → writes temp source → spawns **Container 1** (golang:1.22-alpine) to compile + vet.
+3. On success: spawns **Container 2** (minimal/scratch) to test + hash binary.
+4. On success: registers **CodeSkill** in in-memory map.
+5. Seed prints success message and awaits further stdin commands.
 
-Use this exact flow in generated code.
+**Desired end state after bootstrap + a few iterations**:
+- CodeSkill is registered and functional.
+- The agent can reliably respond to "codeskill: generate a skill that …" requests.
+- At least 4–8 foundational skills have been generated and registered without external intervention:
+  - MessageHubSkill (pub/sub router via JSON-lines stdin/stdout)
+  - LLMSelectorSkill (routes prompts to best LLM based on task type/metadata)
+  - One or more per-LLM wrapper skills (OllamaSkill, GrokSkill, etc.) with secret isolation
+  - Utility skills (file I/O, git, shell-in-sandbox, etc.)
+- Skills can compose via structured messages through the hub.
+- Every generation attempt passes:
+  - Compilation
+  - Static analysis (go vet minimum)
+  - Basic runtime test
+  - Security invariants (no unsafe patterns, no leaked secrets)
+- Total bootstrap-to-useful-swarm time: ideally < 10 minutes with a capable local LLM.
 
-- **Sandbox Options (evolution path)**  
-  | Level       | Isolation                  | Attack Surface                  | Overhead     | When to Use                          |
-  |-------------|----------------------------|----------------------------------|--------------|--------------------------------------|
-  | Docker      | Namespaces + cgroups + seccomp | Full host kernel                | Very low     | MVP, trusted local dev               |
-  | gVisor      | User-space kernel (Sentry) | Very small (Go reimpl + few host calls) | Low-medium   | Untrusted code, good perf balance    |
-  | Firecracker | Hardware microVM (KVM)     | Guest kernel + tiny hypervisor  | Medium       | Production, adversarial/multi-tenant |
-  | WASM (future) | TinyGo + wasmtime          | No syscalls to host             | Low          | Lightweight, no-container fallback   |
+If any step fails repeatedly, the seed provides clear stdout diagnostics and allows retry via re-pasting a refined prompt.
 
-  Start with Docker (rootless if possible). Upgrade to gVisor (as Docker runtime `runsc`) or Firecracker (via custom runner or Kata) when executing truly untrusted AI-generated code.
+## Core Components
 
-## Threat Model (what we defend against)
+- **Seed Binary**  
+  - stdin → LLM → JSON → Docker SDK → Container 1 (build/vet) → Container 2 (test/hash) → register or retry  
+  - Uses official `github.com/docker/docker/client` (no shell exec)  
+  - Verbose progress logging on stdout  
+  - In-memory skill registry: `map[string]Skill` (name → prompt template + binary path + hash + metadata)
 
-- Prompt injection → agent generates malicious Go → sandbox + static analysis blocks escape  
-- Container escape → seccomp + no caps + read-only mounts contain  
-- Network exfil → default network=none  
-- Self-modification of seed → binary read-only, no write access  
-- Resource exhaustion → cgroup limits + timeouts  
-- Dependency confusion / supply-chain → user builds seed themselves  
+- **Skill Registry**  
+  - Ephemeral (lost on restart — intentional)  
+  - Skill = {Name, PromptTemplate, BinaryPath, Hash, RegisteredAt}
 
-## Non-Goals (for now)
+- **Inter-Skill Messaging Standard**  
+  - JSON lines over stdin/stdout  
+  - Mandatory envelope: `{from, to, type, payload, id, timestamp}`  
+  - Enables loose coupling and future orchestration (hub routes, selector dispatches)
 
-- Multi-user / authentication  
-- Persistent state beyond skill registry  
-- Fancy UI (chat-only)  
-- Cloud deployment (local-first)  
+- **LLM Management**  
+  - Secrets never in code or prompts  
+  - Injected via environment variables at container runtime  
+  - Future LLMSelectorSkill decides routing (code-gen → specialized model, reasoning → another, etc.)
 
-## Evolution / Roadmap Ideas
+- **Resilience Features**  
+  - Up to 3 LLM retries per generation with error feedback appended  
+  - Clear stdout checkpoints at every stage  
+  - Graceful degradation on timeouts / parse failures  
+  - No partial registrations — all or nothing
 
-- Add `sandbox-provider` abstraction (Docker → gVisor → Firecracker switchable)  
-- WASM skill support for even lighter isolation  
-- Audit log immutability (append-only file + hash chain)  
-- Skill signing / revocation mechanism  
-- Multi-agent coordination (swarms)
+## Security invariants (checked at every generation)
 
-This document is living — update it as the implementation solidifies. PRs welcome for clarifications, diagrams (mermaid?), or tighter security arguments.
+- No network unless explicitly allowed per skill
+- Readonly rootfs + no capabilities
+- User nobody / UID 65534
+- Context timeouts everywhere
+- Static analysis blocks unsafe.{Pointer,Slice}, syscall, dangerous exec patterns
+- Secrets only via env — never printed/logged
+
+## Evolution & Non-Goals
+
+Non-goals (by design):
+- Persistent memory / long-term state
+- Multi-user / authentication
+- Cloud coordination
+- GUI / web interface
+- Package management beyond go mod in containers
+
+Future extensions should remain emergent — generated via CodeSkill or successor skills — never hand-written in the repo.
+
+This architecture enables a single tiny binary to grow, under strict constraints, into a swarm of sandboxed, composable agents — all driven by natural language and local compute.
