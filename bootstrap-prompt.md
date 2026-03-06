@@ -1,42 +1,39 @@
-# SeedClaw Bootstrap Prompt – v1.1 (2026-02-25)
+# SeedClaw Bootstrap Prompt – v1.3 – Thin Orchestrator + Core Skills (2026-03)
 
-Use this prompt **directly in GitHub Copilot, Cursor, Claude Artifacts, Aider, Continue.dev, or similar coding agent** to initialize the Go project and generate `seedclaw.go`.
+**Use this prompt directly in GitHub Copilot, Cursor, Claude Artifacts, Aider, Continue.dev, Grok web chat, or similar coding agent.**
 
-**Instructions for the coding agent:**
+**Context documents** (read these first from https://github.com/PixnBits/SeedClaw):
+- PRD.md
+- ARCHITECTURE.md (version 1.2 – Thin Host + Controlled IPC)
 
-You are generating the **initial seed binary** for SeedClaw – a self-hosting AI agent platform.  
-Read and strictly follow these documents from the repo https://github.com/PixnBits/SeedClaw:
+**Task**
+Generate a minimal, production-ready starting point for SeedClaw consisting of:
+1. The **thin host orchestrator** (`seedclaw.go`)
+   - ONLY: chat input (stdin + optional Telegram), message routing, Docker lifecycle, narrow Unix socket IPC server
+   - No LLM calls, no code generation/compilation inside the binary
+   - Implements strict IPC validation (whitelist actions, parameter checks, peer UID check)
+2. Four **core skill definition files** in `skills/` directory:
+   - skills/core/messagehub.md
+   - skills/core/llmcaller.md
+   - skills/sdlc/coder.md
+   - skills/sdlc/skill-builder.md
 
-- PRD.md (Product Requirements Document) – defines mission, MVP scope, constraints.
-- ARCHITECTURE.md – details principles, components, sandbox model, threat model.
+**Output format**
+Provide complete files as fenced code blocks:
+- go.mod
+- seedclaw.go
+- skills/core/messagehub.md
+- skills/core/llmcaller.md
+- skills/sdlc/coder.md
+- skills/sdlc/skill-builder.md
+- (optional) .env.example, Dockerfile.dev
 
-**Task:**
-Generate a complete, minimal, compilable Go project that implements the **seed binary** as described.
+**Key requirements**
+- Use Go 1.21+ stdlib + minimal deps (docker/docker/client, gorilla/websocket or tgbotapi if adding Telegram)
+- IPC: Unix socket (~/.seedclaw/ipc.sock or abstract @seedclaw-ipc), 0600 perms, line-delimited JSON
+- Allowed IPC actions: start_skill, stop_skill, restart_skill, get_logs, get_status
+- Skills communicate with host only via this IPC (no docker socket in containers)
+- Skills are defined via markdown (prompt template + docker run spec)
+- Focus on security: strict input validation, timeouts, read-only mounts, no unsafe code patterns
 
-**Requirements for seedclaw.go:**
-- Package main
-- Use only necessary external modules (go mod init seedclaw; go get as needed)
-- Minimal dependencies: 
-  - LLM: prefer ollama-go (local) or openai-compatible client (API fallback via env OPENAI_API_KEY or similar)
-  - Docker: github.com/docker/docker/client
-  - Chat: start with bufio stdin/stdout loop; bonus: add telegram-bot-api if BOT_TOKEN env present
-- Must implement the bootstrap loop:
-  1. Accept user prompt (stdin or chat).
-  2. Call LLM with the full user prompt + context (include safety rules from ARCHITECTURE.md).
-  3. Expect structured JSON output from LLM: {code: string, binary_name: string, hash: string}
-  4. Spawn Docker container (alpine + golang) to compile the code → run go vet → test execution.
-  5. If successful, "register" the skill (in-memory map or simple file).
-  6. Reply to user with status.
-- Enforce security:
-  - Docker run flags: --read-only, --network=none (default), --cap-drop=ALL, --security-opt seccomp=unconfined only if needed, timeout.
-  - No os/exec outside sandbox.
-  - Basic prompt guard: reject code with syscall, unsafe, os/exec unless whitelisted.
-- Output: full project files as code blocks:
-  - go.mod
-  - go.sum (if any)
-  - seedclaw.go (main logic)
-  - Optional: .env.example, Dockerfile for dev
-
-After generation, the user will build & run it, then paste this same prompt (or a variant) into the running binary to bootstrap CodeSkill.
-
-Generate the code now. Output only the files—no explanations outside code blocks.
+Generate the code and markdown files now. Output **only** the files — no explanations outside code blocks.
