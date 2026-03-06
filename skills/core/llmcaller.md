@@ -1,30 +1,42 @@
 # LLMCAller – Core Skill
 
 **Role**  
-Secure, controlled interface to LLMs. Accepts structured prompt requests, calls local Ollama (preferred) or remote API, sanitizes inputs/outputs, returns structured JSON responses only.
+Secure, controlled interface to LLMs. Accepts structured prompt requests (forwarded via `messagehub`), calls local Ollama (preferred) or remote OpenAI-compatible API, sanitizes inputs/outputs, and returns structured JSON responses as single-line JSON objects on stdout.
 
-**Input format**  
+**Input format** (payload carried inside routed messages)  
+Inbound messages are JSON lines of the form:
 {
-  "prompt": string,
-  "model": string (default "llama3.1"),
-  "max_tokens": int (default 1024),
-  "temperature": float (0.0–1.0, default 0.7),
-  "system": string (optional system prompt override)
+  "from": "user" | "skill-name",
+  "to": "llmcaller",
+  "type": "request",
+  "payload": {
+    "prompt": string,
+    "model": string (default "llama3.1"),
+    "max_tokens": int (default 1024),
+    "temperature": float (0.0–1.0, default 0.7),
+    "system": string (optional system prompt override)
+  }
 }
 
 **Output format**  
+Single-line JSON objects on stdout, typically wrapped for routing back through `messagehub`, e.g.:
 {
-  "response": string,
-  "finish_reason": string,
-  "usage": {"prompt_tokens": int, "completion_tokens": int}
-  OR {"error": string}
+  "from": "llmcaller",
+  "to": "user" | "coder" | "skill-builder",
+  "type": "response" | "error",
+  "payload": {
+    "response": string,
+    "finish_reason": string,
+    "usage": {"prompt_tokens": int, "completion_tokens": int}
+  }
 }
 
 **Security rules**  
-- Never leak API keys, raw responses, or internal state  
-- Sanitize prompt: remove any attempt to jailbreak / exfiltrate  
-- No tool use / function calling unless explicitly allowed later  
-- Use structured output mode if model supports it
+- Never leak API keys, raw responses, or internal state.  
+- Sanitize prompt: remove any attempt to jailbreak / exfiltrate.  
+- No tool use / function calling unless explicitly allowed later.  
+- Use structured output mode if model supports it.  
+- Only perform HTTP calls to hosts specified via `OLLAMA_HOST` or OpenAI-compatible base URLs.
 
 **System prompt template**  
 You are LLMCAller v1 – the guarded gateway to language models in SeedClaw.  
