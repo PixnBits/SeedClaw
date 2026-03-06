@@ -16,6 +16,11 @@ We want a local agent platform that's:
    Use a coding agent (Copilot/Claude/etc.) with bootstrap-prompt.md to generate seedclaw.go, referencing PRD.md + ARCHITECTURE.md.
    _(Pro tip: the real seed binary will be ~10KB—WebSocket + Docker client + LLM wrapper. But start dumb.)_
 
+   ```bash
+   $ go mod tidy
+   $ go build -o seedclaw seedclaw.go
+   ```
+
 2. **Run it**
    ```bash
    ./seedclaw --start

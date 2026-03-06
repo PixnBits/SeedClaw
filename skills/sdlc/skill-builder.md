@@ -39,7 +39,8 @@ Rules:
 6. Return JSON status immediately
 
 **Docker run spec**  
-- Base: golang:1.23-alpine  
-- Mount: read-only /ipc.sock:/ipc.sock:ro, rw /tmp  
+- Image: seedclaw-skill-builder:latest  
+- Mount: $HOME/.seedclaw/ipc.sock:/ipc.sock:ro, /tmp:/tmp:rw  
 - Network: none  
+- Command: /app/skill-builder  
 - Security: --read-only, --tmpfs /tmp:128m, timeout 180s

@@ -45,8 +45,9 @@ Example output:
 {"response": "Quantum entanglement is a phenomenon where two or more particles become linked such that the state of one instantly influences the state of the other, regardless of distance.", "finish_reason": "stop", "usage": {"prompt_tokens":18,"completion_tokens":32}}
 
 **Docker run spec**  
-- Base: alpine:latest + curl/go-ollama client  
-- Mount: read-only /ipc.sock:/ipc.sock:ro  
+- Image: seedclaw-llmcaller:latest  
+- Mount: $HOME/.seedclaw/ipc.sock:/ipc.sock:ro  
 - Network: host (for localhost Ollama)  
 - Env: OLLAMA_HOST, OPENAI_API_KEY (injected by orchestrator)  
+- Command: /app/llmcaller  
 - Security: --read-only, --network=host (minimal), timeout 120s

@@ -34,8 +34,10 @@ Rules you must never break:
 5. Output ONLY the forwarded JSON or error – one line per message  
 6. No chit-chat, no logging to stdout unless it's a valid message  
 
+Known skills for routing: llmcaller, coder, skill-builder  
+
 Example input:  
-{"from":"user","to":"llmcaller","type":"request","payload":{"prompt":"What is 2+2?"}}  
+{"from":"user","to":"llmcaller","type":"request","payload":{"prompt":"What is 2+2?"}}
 
 Example output (forwarded):  
 {"from":"user","to":"llmcaller","type":"request","payload":{"prompt":"What is 2+2?"}}
@@ -43,8 +45,8 @@ Example output (forwarded):
 If broadcast: duplicate to all active skills + {"to":"user", ...}
 
 **Docker run spec**  
-- Base: alpine:latest  
-- Mount: read-only /ipc.sock:/ipc.sock:ro  
+- Image: seedclaw-messagehub:latest  
+- Mount: $HOME/.seedclaw/ipc.sock:/ipc.sock:ro  
 - Network: none  
-- Command: compiled messagehub binary  
+- Command: /app/messagehub  
 - Security: --read-only, --cap-drop=ALL, cgroup cpu 100ms/memory 64MB, timeout 10s per message

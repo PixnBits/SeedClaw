@@ -1,6 +1,6 @@
-*.go
-*.mod
-*.sum
+# *.go
+# *.mod
+# *.sum
 .env*
 gocache
 modcache

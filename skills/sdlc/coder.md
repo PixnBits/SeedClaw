@@ -42,7 +42,8 @@ Example input: {"task": "Create a simple echo skill that repeats user message"}
 Example output: {"code": "package main\n...\n", "filename": "echo.go", "explanation": "Simple stdin/stdout echo with timeout."}
 
 **Docker run spec**  
-- Base: golang:1.23-alpine  
-- Mount: read-only /ipc.sock:/ipc.sock:ro, rw /tmp  
-- Network: none  
+- Image: seedclaw-coder:latest  
+- Mount: $HOME/.seedclaw/ipc.sock:/ipc.sock:ro, /tmp:/tmp:rw  
+- Network: host  
+- Command: /app/coder  
 - Security: --read-only, --tmpfs /tmp:64m, timeout 60s
