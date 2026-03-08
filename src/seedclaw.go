@@ -99,17 +99,6 @@ func cleanupSocket() error {
 			socketPath, err, socketPath)
 	}
 
-	// If someone left a directory there (old bug), clean it
-	fi, err := os.Stat(socketDir)
-	if err == nil && fi.IsDir() {
-		if err := os.RemoveAll(socketDir); err != nil {
-			return fmt.Errorf("cannot remove bad directory %s: %w\n\n"+
-				"Try manually:\n  sudo rm -rf %s\nthen retry",
-				socketDir, err, socketDir)
-		}
-		log.Printf("Removed stale directory %s", socketDir)
-	}
-
 	return nil
 }
 
