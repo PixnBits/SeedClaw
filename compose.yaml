@@ -1,10 +1,6 @@
-version: '3.8'
-
 services:
   message-hub:
-    build:
-      context: .
-      dockerfile: src/skills/core/message-hub/Dockerfile
+    build: src/skills/core/message-hub
     volumes:
       - ./shared/sockets/control:/run/sockets/control:rw
     # Security hardening (add more as we go)
