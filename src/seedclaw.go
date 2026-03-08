@@ -13,9 +13,8 @@ import (
 )
 
 const (
-	socketPath     = "/tmp/seedclaw.sock" // will be mounted into message-hub
-	composeFile    = "compose.yaml"
-	defaultTimeout = 15 * time.Second
+	socketPath  = "/tmp/seedclaw.sock"
+	composeFile = "compose.yaml"
 )
 
 func main() {
@@ -34,15 +33,13 @@ func main() {
 }
 
 func startCoreServices() error {
-	// Remove old socket if exists
+	// Clean up old socket
 	_ = os.Remove(socketPath)
 
-	// Make sure compose.yaml exists (for MVP we assume it is already in repo)
 	if _, err := os.Stat(composeFile); os.IsNotExist(err) {
-		return fmt.Errorf("compose.yaml not found in current directory")
+		return fmt.Errorf("compose.yaml not found")
 	}
 
-	// docker compose up -d (only the core services should start)
 	cmd := exec.Command("docker", "compose", "up", "-d")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -50,13 +47,8 @@ func startCoreServices() error {
 		return fmt.Errorf("docker compose up failed: %w", err)
 	}
 
-	// Wait a bit for message-hub to create/listen on the socket
-	time.Sleep(2 * time.Second)
-
-	// Check socket exists
-	if _, err := os.Stat(socketPath); err != nil {
-		return fmt.Errorf("unix socket %s not created by message-hub: %w", socketPath, err)
-	}
+	// Give container a moment to start
+	time.Sleep(1500 * time.Millisecond)
 
 	fmt.Println("Core services started. Unix socket ready:", socketPath)
 	return nil
@@ -65,17 +57,31 @@ func startCoreServices() error {
 func runChat() error {
 	fmt.Println("SeedClaw chat mode. Type messages below (empty line or Ctrl+D to exit)")
 
-	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
+	// Create listener on host
+	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
-		return fmt.Errorf("cannot connect to message-hub: %w", err)
+		return fmt.Errorf("cannot listen on unix socket: %w", err)
 	}
-	defer conn.Close()
+	defer ln.Close()
 
+	// Make sure everyone can connect (especially important if container runs non-root)
+	if err := os.Chmod(socketPath, 0666); err != nil {
+		log.Printf("Warning: chmod failed: %v", err)
+	}
+
+	// Accept exactly one connection (MVP — seedclaw ↔ message-hub)
+	fmt.Println("Waiting for message-hub to connect...")
+	conn, err := ln.Accept()
+	if err != nil {
+		return fmt.Errorf("accept failed: %w", err)
+	}
+	fmt.Println("Message-hub connected!")
+
+	// Forward replies from hub → stdout in background
 	go func() {
-		// Forward replies from hub → stdout
 		scanner := bufio.NewScanner(conn)
 		for scanner.Scan() {
-			fmt.Println("[hub] " + scanner.Text())
+			fmt.Println("[hub]", scanner.Text())
 		}
 		if err := scanner.Err(); err != nil && err != io.EOF {
 			log.Printf("read from hub failed: %v", err)
@@ -95,10 +101,7 @@ func runChat() error {
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
 	fmt.Println("Exiting chat.")
+	conn.Close()
 	return nil
 }
