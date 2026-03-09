@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"strings"
 	"time"
 )
@@ -25,6 +26,12 @@ func main() {
 			break
 		}
 		log.Printf("Waiting for control socket (%d/60): %v", i+1, err)
+		// log the permissions of the control socket for debugging
+		if stat, statErr := os.Stat(socketPath); statErr == nil {
+			log.Printf("Control socket permissions: %v", stat.Mode())
+		} else {
+			log.Printf("Could not stat control socket: %v", statErr)
+		}
 		time.Sleep(500 * time.Millisecond)
 	}
 	if err != nil {

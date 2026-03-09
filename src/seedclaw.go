@@ -13,10 +13,16 @@ import (
 )
 
 const (
-	socketDir      = "./shared/sockets/control"
-	socketPath     = socketDir + "/seedclaw.sock"
-	composeFile    = "compose.yaml"
+	socketDir   = "./shared/sockets/control"
+	socketPath  = socketDir + "/seedclaw.sock"
+	composeFile = "compose.yaml"
 )
+
+var controlListener net.Listener
+
+// GID that message-hub will run as inside its container. Recommend creating
+// a matching group on the host with this GID and chowning the socket dir to it.
+const socketGroupGID = 1500
 
 func main() {
 	start := flag.Bool("start", false, "Start core services and enter chat mode")
@@ -44,16 +50,32 @@ func startCoreServices() error {
 		return err
 	}
 
+	// Ensure the socket directory is accessible by container processes that
+	// may be running as different UIDs. Make it world-traversable so the
+	// container can reach the socket regardless of host group configuration.
+	if err := os.Chmod(socketDir, 0777); err != nil {
+		log.Printf("Warning: chmod failed on socket dir: %v", err)
+	}
+
 	// 3. Create and listen on the socket BEFORE starting containers
 	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", socketPath, err)
 	}
-	defer ln.Close() // will close after accept in runChat, but we listen early
+	// Keep the listener open for the lifetime of the program so the
+	// message-hub can connect to the socket. Do not close it here.
+	controlListener = ln
 
-	// Make socket accessible to container (non-root user)
+	// Make the socket world-writable so containers that cannot change
+	// ownership (rootless/uid-mapped environments) can still connect.
 	if err := os.Chmod(socketPath, 0666); err != nil {
 		log.Printf("Warning: chmod failed on socket: %v", err)
+	}
+	// Log current socket file mode for debugging
+	if fi, err := os.Stat(socketPath); err == nil {
+		log.Printf("socket stat: %v", fi.Mode())
+	} else {
+		log.Printf("socket stat failed: %v", err)
 	}
 
 	// 4. Start compose now that the socket file exists
@@ -105,14 +127,11 @@ func cleanupSocket() error {
 func runChat() error {
 	fmt.Println("Chat mode ready. Type messages (empty line or Ctrl+D to exit):")
 
-	// Re-listen in case cleanup happened after initial listen
-	ln, err := net.Listen("unix", socketPath)
-	if err != nil {
-		return fmt.Errorf("cannot listen in chat mode: %w", err)
+	// Accept a single connection from the message-hub on the pre-existing listener
+	if controlListener == nil {
+		return fmt.Errorf("control listener not initialized")
 	}
-	defer ln.Close()
-
-	conn, err := ln.Accept()
+	conn, err := controlListener.Accept()
 	if err != nil {
 		return fmt.Errorf("accept failed: %w", err)
 	}

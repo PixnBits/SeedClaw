@@ -5,7 +5,10 @@ services:
       - ./shared/sockets/control:/run/sockets/control:rw
     # Run as non-root numeric user to avoid granting root inside container
     # Use host UID:GID (1000) so the bind-mounted socket directory is accessible
-    user: "1000:1000"
+    # Run as the message-hub user inside the image with a dedicated group (seedclaw:GID=1500)
+    # Entrypoint will chown the socket and drop privileges — do not force host uid/gid
+    # (running container initially as root so entrypoint can adjust socket ownership)
+    # user: "10001:1500"
     # Security hardening (add more as we go)
     cap_drop:
       - ALL
