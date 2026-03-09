@@ -2,75 +2,44 @@ package main
 
 import (
 	"bufio"
-	"fmt"
-	"io"
+	"encoding/json"
 	"log"
 	"net"
 	"os"
-	"strings"
-	"time"
 )
 
-// CONTROL_ADDR may be set by compose to point at the host proxy. Default
-// uses Docker's host-gateway hostname and port 50023.
-var controlAddr = getenv("CONTROL_ADDR", "host.docker.internal:50023")
-
-func getenv(k, d string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return d
+type Message struct {
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Content string `json:"content"`
 }
 
 func main() {
-	log.Printf("Message-Hub starting — connecting to %s", controlAddr)
-
-	var conn net.Conn
-	var err error
-
-	// Retry until host proxy accepts
-	for i := 0; i < 60; i++ { // ~30 seconds max
-		conn, err = net.Dial("tcp", controlAddr)
-		if err == nil {
-			break
-		}
-		log.Printf("Waiting for control proxy (%d/60): %v", i+1, err)
-		time.Sleep(500 * time.Millisecond)
+	addr := os.Getenv("CONTROL_ADDR")
+	if addr == "" {
+		addr = "host.docker.internal:50023"
 	}
+
+	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		log.Fatalf("Failed to connect to host control proxy after retries: %v", err)
+		log.Fatal(err)
 	}
 	defer conn.Close()
+	log.Println("Connected to seedclaw at", addr)
 
-	log.Println("Successfully connected to seedclaw control proxy!")
+	// Send hello
+	msg := Message{From: "message-hub", To: "seedclaw", Content: "Hello from message-hub"}
+	data, _ := json.Marshal(msg)
+	conn.Write(append(data, '\n'))
 
-	reader := bufio.NewReader(conn)
-	writer := bufio.NewWriter(conn)
-
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err != io.EOF {
-				log.Printf("read error: %v", err)
-			}
-			return
-		}
-
-		line = strings.TrimSpace(line)
-		if line == "" {
+	// Listen for responses
+	scanner := bufio.NewScanner(conn)
+	for scanner.Scan() {
+		var msg Message
+		if err := json.Unmarshal(scanner.Bytes(), &msg); err != nil {
+			log.Println("Invalid message:", err)
 			continue
 		}
-
-		log.Printf("[seedclaw → hub] %q", line)
-
-		// MVP echo (later: proper routing table)
-		reply := fmt.Sprintf("hub received: %s (at %s)", line, time.Now().Format(time.RFC3339))
-
-		_, err = fmt.Fprintln(writer, reply)
-		if err != nil {
-			log.Printf("write error: %v", err)
-			return
-		}
-		writer.Flush()
+		log.Printf("Received: %+v\n", msg)
 	}
 }

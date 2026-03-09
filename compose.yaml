@@ -10,7 +10,6 @@ services:
     tmpfs:
       - /tmp:mode=1777,size=64m
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    network_mode: host
     environment:
-      - CONTROL_ADDR=host.docker.internal:50023
+      - CONTROL_ADDR=127.0.0.1:50023
