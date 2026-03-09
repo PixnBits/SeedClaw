@@ -19,6 +19,13 @@ type Message struct {
 	Content string `json:"content"`
 }
 
+// For translation results we may parse messages back
+type OutMessage struct {
+	From    string      `json:"from"`
+	To      string      `json:"to"`
+	Content interface{} `json:"content"`
+}
+
 type OpenAIRequest struct {
 	Model    string          `json:"model"`
 	Messages []OpenAIMessage `json:"messages"`
@@ -67,13 +74,30 @@ func main() {
 		log.Printf("Received: %+v\n", msg)
 
 		if msg.To == "llm-caller" {
-			// Assume content is prompt
-			response, err := callLLM(msg.Content)
+			// Treat content as a user prompt to be translated into skill calls
+			translated, err := translateToSkillCalls(msg.Content)
 			if err != nil {
-				log.Println("LLM call error:", err)
-				response = "Error: " + err.Error()
+				log.Println("Translate error:", err)
+				// fallback: return plain LLM text
+				response, err2 := callLLM(msg.Content)
+				if err2 != nil {
+					response = "Error: " + err.Error()
+				}
+				reply := Message{From: "llm-caller", To: msg.From, Content: response}
+				data, _ := json.Marshal(reply)
+				conn.Write(append(data, '\n'))
+				continue
 			}
-			reply := Message{From: "llm-caller", To: msg.From, Content: response}
+
+			// Send each produced skill message via the message-hub (conn)
+			for _, out := range translated {
+				b, _ := json.Marshal(out)
+				conn.Write(append(b, '\n'))
+			}
+
+			// Inform original requester
+			summary := fmt.Sprintf("Issued %d skill calls", len(translated))
+			reply := Message{From: "llm-caller", To: msg.From, Content: summary}
 			data, _ := json.Marshal(reply)
 			conn.Write(append(data, '\n'))
 		}
@@ -81,16 +105,10 @@ func main() {
 }
 
 func callLLM(prompt string) (string, error) {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		return "", fmt.Errorf("OPENAI_API_KEY not set")
-	}
-
-	reqBody := OpenAIRequest{
-		Model: "gpt-3.5-turbo",
-		Messages: []OpenAIMessage{
-			{Role: "user", Content: prompt},
-		},
+	reqBody := map[string]interface{}{
+		"model":  "llama3.2:latest",
+		"prompt": prompt,
+		"stream": false,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -98,12 +116,11 @@ func callLLM(prompt string) (string, error) {
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", "http://ollama:11434/api/generate", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -117,14 +134,37 @@ func callLLM(prompt string) (string, error) {
 		return "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
 
-	var openaiResp OpenAIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&openaiResp); err != nil {
+	var ollamaResp map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&ollamaResp); err != nil {
 		return "", err
 	}
 
-	if len(openaiResp.Choices) == 0 {
-		return "", fmt.Errorf("no choices in response")
+	response, ok := ollamaResp["response"].(string)
+	if !ok {
+		return "", fmt.Errorf("no response in reply")
 	}
 
-	return strings.TrimSpace(openaiResp.Choices[0].Message.Content), nil
+	return strings.TrimSpace(response), nil
+}
+
+// translateToSkillCalls asks the LLM to convert a user prompt into
+// a JSON array of messages to send to skills (format: OutMessage).
+func translateToSkillCalls(prompt string) ([]OutMessage, error) {
+	system := `You are an assistant that converts a user's high-level request into a sequence of SeedClaw skill messages.
+Output must be a JSON array of objects with keys: from, to, content. Content may be a string or an object.
+Example:
+[{"from":"llm-caller","to":"coder","content":{"action":"generate_skill","skill_name":"hello-world","prompt":"..."}}]
+Only output the JSON array.`
+
+	full := system + "\nUser request:\n" + prompt
+	resp, err := callLLM(full)
+	if err != nil {
+		return nil, err
+	}
+
+	var arr []OutMessage
+	if err := json.Unmarshal([]byte(strings.TrimSpace(resp)), &arr); err != nil {
+		return nil, fmt.Errorf("failed to parse LLM JSON output: %v; raw: %s", err, resp)
+	}
+	return arr, nil
 }

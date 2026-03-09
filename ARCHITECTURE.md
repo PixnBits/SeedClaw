@@ -21,7 +21,8 @@ The system ships a small trusted core so users reach a working state quickly. Ev
    - Fresh ephemeral container per major invocation  
    - Read-only mounts where possible  
    - Ephemeral `/tmp` for writes  
-   - `--network=none` by default (explicit opt-in for network access)  
+   - `--network=none` by default (explicit opt-in for network access)
+    - **never** `network=host`
    - Dropped capabilities, no root, strict seccomp profile  
    - cgroup limits (CPU burst, memory cap at 512 MiB default)  
    - 30-second timeout kill  

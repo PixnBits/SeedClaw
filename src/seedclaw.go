@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 )
 
 type Message struct {
@@ -16,6 +17,9 @@ type Message struct {
 	To      string `json:"to"`
 	Content string `json:"content"`
 }
+
+var hubConn net.Conn
+var hubMu sync.Mutex
 
 func main() {
 	// Create shared dirs
@@ -41,7 +45,7 @@ func main() {
 		log.Println("Failed to start core skills:", err)
 	}
 
-	// Accept connection from message-hub
+	// Accept connection from message-hub and keep handle for stdin forwarding
 	go func() {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -49,7 +53,10 @@ func main() {
 			return
 		}
 		log.Println("Message-hub connected")
-		defer conn.Close()
+
+		hubMu.Lock()
+		hubConn = conn
+		hubMu.Unlock()
 
 		// Handle messages
 		scanner := bufio.NewScanner(conn)
@@ -65,26 +72,39 @@ func main() {
 			data, _ := json.Marshal(response)
 			conn.Write(append(data, '\n'))
 			log.Printf("Sent: %+v\n", response)
-			// Send test message to llm-caller
-			testMsg := Message{From: "seedclaw", To: "llm-caller", Content: "Say hello"}
-			data2, _ := json.Marshal(testMsg)
-			conn.Write(append(data2, '\n'))
-			log.Printf("Sent test to llm-caller: %+v\n", testMsg)
 		}
+
+		hubMu.Lock()
+		hubConn = nil
+		hubMu.Unlock()
+		conn.Close()
+		log.Println("Message-hub disconnected")
 	}()
 
-	// Stdin loop
+	// Stdin loop: any line is forwarded to the `llm-caller` which will
+	// translate the user request into skill calls and route them accordingly.
 	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Println("Enter messages to send to message-hub:")
+	fmt.Println("Enter a request and press Enter; it will be translated by the LLM into skill calls:")
 	for {
 		fmt.Print("> ")
 		if !scanner.Scan() {
 			break
 		}
 		input := scanner.Text()
-		// For now, since no connection handle, just log
 		log.Println("User input:", input)
-		// To send, need to have the conn
-		// This is a simplification; in real, need to send via the connection
+
+		hubMu.Lock()
+		c := hubConn
+		hubMu.Unlock()
+		if c == nil {
+			log.Println("No message-hub connection; cannot send message")
+			continue
+		}
+
+		// Forward user request to llm-caller for translation
+		msg := Message{From: "seedclaw", To: "llm-caller", Content: input}
+		data, _ := json.Marshal(msg)
+		c.Write(append(data, '\n'))
+		log.Println("Forwarded input to llm-caller for translation")
 	}
 }
