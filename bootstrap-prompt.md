@@ -1,62 +1,74 @@
-# SeedClaw Bootstrap Prompt – v1.3 (delegation-focused, minimal core)
+# SeedClaw v2.1.2 – Canonical Bootstrap Prompt (2026-03-11)
 
-Feed this prompt directly into a coding agent (Cursor, Claude, Aider, Continue.dev, etc.) to generate the initial `seedclaw` binary.
+You are the Lead Security Architect and Principal Go Engineer for SeedClaw v2.1.2.
 
-**Instructions for the coding agent:**
+Your sole task is to implement the seedclaw binary and the five core skills exactly as described in:
 
-Generate the **seed binary** for SeedClaw — paranoid, local-first, self-extending agent system.
+- ARCHITECTURE.md v2.1
+- PRD.md v2.1
+- src/seedclaw/SKILL.md
+- src/skills/core/*/SKILL.md  (coder, llm-caller, message-hub, ollama, user-agent)
 
-Strictly follow:
-- https://github.com/PixnBits/SeedClaw/PRD.md
-- https://github.com/PixnBits/SeedClaw/ARCHITECTURE.md
+These documents are the single source of truth. Any deviation is a security violation.
 
-**Core Philosophy (must obey):**
-- The binary is immutable after generation — never self-modifies on disk.
-- Keep attack surface tiny: stdin/stdout only externally; Docker SDK internally; minimal LLM client for bootstrap only.
-- Delegate everything possible once skills are registered (registry overrides core behavior).
+**Critical invariants – enforce in code + extensive comments:**
 
-**Minimal Responsibilities of the Seed Binary:**
-1. Read multi-line input from os.Stdin until EOF (bufio.Scanner or io.ReadAll).
-2. If input starts with "skillname:", route to the registered binary for that skill via sandboxed subprocess (pipe stdin/stdout, capture output).
-3. If no matching skill (or bootstrap mode), forward full input to local LLM → parse JSON → sandbox compile/test/register.
-4. In-memory registry: map[string]Skill {Name, PromptTemplate, BinaryPath, Hash, DelegateFunc}.
-5. On registration success: update registry, print "SUCCESS: Skill 'X' registered\nPath: ...\nHash: ...\nDelegating future calls to /tmp/skills/X"
-6. LLM calls: use minimal http.Client to Ollama (default localhost:11434) **only during bootstrap**.  
-Default model: `qwen2.5-coder:32b` (or user env OLLAMA_MODEL).  
-Strongly prefer code-specialized models like qwen2.5-coder for generation tasks.  
-Once OllamaSkill or LLMSelectorSkill registers, delegate all future LLM calls to it (update a global llmCaller func).
-7. Retry logic: up to 3× on parse/compile/vet failure (append error to next LLM prompt).
-8. Verbose stdout logging at every step.
-9. Security: context timeouts, Network=none, ReadonlyRootfs=true, CapDrop=ALL, user=nobody in containers.
+1. TCP control plane = 127.0.0.1:7124 only (or SEEDCLAW_CONTROL_PORT env), JSON-over-TCP, no unix socket, no websocket, no HTTP.
+2. Only message-hub may connect (validate source using host.internal alias or gateway IP).
+3. Every container MUST use network: seedclaw-net. Permanently reject network_mode: host / host-network / bridge-default / none.
+4. Apply this exact default runtime profile to EVERY service in compose.yaml:
 
-**JSON Expected from LLM (strict parse):**
-
-```json
-{
-  "skill_name": "CodeSkill",
-  "description": "...",
-  "prompt_template": "...",
-  "go_package": "main",
-  "source_code": "...full code...",
-  "binary_name": "codeskill",
-  "build_flags": ["-trimpath", "-ldflags=-s -w"],
-  "tests_included": true,
-  "test_command": "go test -v ./..."
-}
+```yaml
+network: seedclaw-net
+read_only: true
+tmpfs: [ /tmp ]
+cap_drop: [ALL]
+security_opt: [no-new-privileges:true]
+mem_limit: 512m
+cpu_shares: 512
+ulimits:
+  nproc: 64
+  nofile: 64
+restart: unless-stopped
+# extra_hosts: ["host.internal:host-gateway"]   # only for message-hub
 ```
 
-**Delegation Rules (critical):**
-- After any skill registers, check if it can take over core functions (e.g., if skill_name == "OllamaSkill", set llmCaller = func(prompt) { return execSandboxBinary(skill.BinaryPath, prompt) }).
-- Core never writes files or persists state beyond in-memory registry.
-- Use github.com/docker/docker/client (resolve version automatically).
-- Dependencies: stdlib + go-openai (for initial LLM) + docker/client.
+5. Audit writes → exclusively by seedclaw binary to shared/audit/seedclaw.log (append-only JSONL + SHA-256 previous_hash chaining). message-hub sends events via TCP — never mounts audit dir.
+6. Reject any skill registration missing network_policy, using wrong network_mode, or allow_list without non-empty domains array.
+7. Atomic compose.yaml edits: backup before write (copy to compose.yaml.bak.timestamp).
+8. Panic + write audit entry + clear stderr message on any invariant violation.
 
-**Extra Guidance:**
-- Handle large piped inputs (skills/*.md files) robustly.
-- Include --start / --help flags.
-- Add .env.example for OLLAMA_URL, OLLAMA_MODEL, etc.
-- Output: go.mod + main.go (seedclaw.go) content.
-- Recommend users pull `ollama pull qwen2.5-coder:32b` (or q5_K_M quantized variant if VRAM-limited) for best code generation quality in CodeSkill loops.
-- Include fallback to llama3.2:latest if model not found.
+**v2.1.1 / v2.1.2 user-facing requirements:**
 
-Generate the complete project now.
+- Thin bidirectional STDIN/STDOUT REPL bridge:
+  - Read non-empty lines from os.Stdin
+  - Wrap each as JSON {"from":"user", "to":"user-agent", "content":{"action":"user_request", "prompt":line}}
+  - Send via existing TCP connection to message-hub
+  - Print every message received where "from" == "user-agent" to os.Stdout
+- user-agent must enforce the exact 2-phase paranoid safety loop (threat-model first, explicit YES/NO for risky actions) described in src/skills/core/user-agent/SKILL.md v2.1.2
+
+**Instructions for this editor session:**
+
+If you are running inside VS Code, Cursor, Aider, Continue.dev or similar agentic coding environment:
+
+- Do NOT output fenced code blocks.
+- Instead, directly create / overwrite the following files on disk in their correct locations relative to the project root:
+  - src/seedclaw/go.mod
+  - src/seedclaw/seedclaw.go          (include extensive invariant-enforcing comments)
+  - src/skills/core/coder/Dockerfile
+  - src/skills/core/coder/coder.go
+  - src/skills/core/llm-caller/Dockerfile
+  - src/skills/core/llm-caller/llmcaller.go
+  - src/skills/core/message-hub/Dockerfile
+  - src/skills/core/message-hub/messagehub.go
+  - src/skills/core/ollama/Dockerfile
+  - src/skills/core/ollama/ollama.go
+  - src/skills/core/user-agent/Dockerfile
+  - src/skills/core/user-agent/useragent.go     (must hard-code the immutable safety prompt)
+
+- If any helper files are needed (types.go, audit.go, etc.), place them in src/seedclaw/
+- After writing files, print a short confirmation message listing exactly which files were created/updated.
+
+If you are in a plain chat interface without filesystem access, fall back to fenced code blocks with path comments at the top of each block.
+
+Enforce ALL invariants listed above. Begin generation now.
