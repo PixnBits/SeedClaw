@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 type Message struct {
@@ -38,12 +39,23 @@ func main() {
 	defer listener.Close()
 	log.Println("Seedclaw listening on :50023")
 
-	// Start core skills via docker compose
-	log.Println("Starting core skills...")
-	err = exec.Command("docker", "compose", "up").Start()
-	if err != nil {
-		log.Println("Failed to start core skills:", err)
+	// Build and start core skills via docker compose (detached)
+	log.Println("Building core skill images...")
+	if out, err := exec.Command("docker", "compose", "build").CombinedOutput(); err != nil {
+		log.Println("docker compose build failed:", err)
+		log.Println(string(out))
+	} else {
+		log.Println("Build output:", string(out))
 	}
+
+	log.Println("Starting core skills (detached)...")
+	if out, err := exec.Command("docker", "compose", "up", "-d").CombinedOutput(); err != nil {
+		log.Println("docker compose up -d failed:", err)
+		log.Println(string(out))
+	} else {
+		log.Println("Compose up output:", string(out))
+	}
+	time.Sleep(5 * time.Second)
 
 	// Accept connection from message-hub and keep handle for stdin forwarding
 	go func() {
@@ -88,20 +100,35 @@ func main() {
 	for {
 		fmt.Print("> ")
 		if !scanner.Scan() {
-			break
+			log.Println("Stdin closed; entering idle mode (seedclaw will keep running).")
+			select {}
 		}
 		input := scanner.Text()
 		log.Println("User input:", input)
 
-		hubMu.Lock()
-		c := hubConn
-		hubMu.Unlock()
+		// Wait for message-hub connection (bounded) before sending; avoids dropping user input
+		start := time.Now()
+		var c net.Conn
+		for {
+			hubMu.Lock()
+			c = hubConn
+			hubMu.Unlock()
+			if c != nil {
+				break
+			}
+			if time.Since(start) > 60*time.Second {
+				log.Println("Timeout waiting for message-hub; dropping input")
+				c = nil
+				break
+			}
+			log.Println("Waiting for message-hub to connect...")
+			time.Sleep(500 * time.Millisecond)
+		}
 		if c == nil {
-			log.Println("No message-hub connection; cannot send message")
 			continue
 		}
 
-		// Forward user request to llm-caller for translation
+		// Send to llm-caller for translation
 		msg := Message{From: "seedclaw", To: "llm-caller", Content: input}
 		data, _ := json.Marshal(msg)
 		c.Write(append(data, '\n'))

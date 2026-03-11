@@ -29,12 +29,13 @@ services:
     restart: unless-stopped
     environment:
       - CONTROL_ADDR=message-hub:50024
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
 
   ollama:
     build: src/skills/core/ollama
     depends_on:
       - message-hub
+    volumes:
+      - ./shared/ollama:/home/ubuntu/.ollama:rw
     cap_drop:
       - ALL
     security_opt:
@@ -42,8 +43,6 @@ services:
     restart: unless-stopped
     environment:
       - CONTROL_ADDR=message-hub:50024
-    ports:
-      - "11434:11434"
 
   coder:
     build: src/skills/core/coder

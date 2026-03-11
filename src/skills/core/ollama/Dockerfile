@@ -18,5 +18,5 @@ EXPOSE 11434
 # Set user
 USER 1000:1000
 
-# Run the wrapper
-CMD ["/ollama"]
+# Override upstream ENTRYPOINT so we run our wrapper binary directly
+ENTRYPOINT ["/ollama"]

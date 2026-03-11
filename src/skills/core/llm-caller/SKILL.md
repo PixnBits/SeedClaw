@@ -50,7 +50,7 @@ This skill provides a thin client interface for making calls to Large Language M
 
 ## Supported Providers
 
-- `openai`: OpenAI GPT models
-- `anthropic`: Anthropic Claude models
-- `ollama`: Local Ollama models
+- `ollama`: Local Ollama instance (default)
 - `grok`: xAI Grok (future implementation)
+- `openai`: OpenAI GPT models (future implementation)
+- `anthropic`: Anthropic Claude models (future implementation)

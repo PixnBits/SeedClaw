@@ -11,6 +11,12 @@ We want a local agent platform that's:
 - Open-source, forkable, and paranoid by design.
 
 ## How to get started (in 5 minutes)
+0. **Copy existing Ollama models**
+
+   If you have already pulled Ollama models look in `/usr/share/ollama/.ollama/models` and copy them into `shared/ollama/models` to save download time.
+
+   Why `shared/ollama/models` instead of mounting `/usr/share/ollama/.ollama/models`? Security is paramount to SeedClaw's architecture. Using `shared` for all mounts/volumes provided to skills and containers avoids surprises.
+
 1. **Build the seed binary**  
 
    Use a coding agent (Copilot/Claude/etc.) with bootstrap-prompt.md to generate seedclaw.go, referencing PRD.md + ARCHITECTURE.md.

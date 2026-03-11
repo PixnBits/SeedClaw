@@ -156,6 +156,8 @@ Example:
 [{"from":"llm-caller","to":"coder","content":{"action":"generate_skill","skill_name":"hello-world","prompt":"..."}}]
 Only output the JSON array.`
 
+	// FIXME: list the skills available in the system so the LLM can choose from them when translating user requests into skill calls.
+
 	full := system + "\nUser request:\n" + prompt
 	resp, err := callLLM(full)
 	if err != nil {

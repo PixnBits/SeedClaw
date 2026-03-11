@@ -18,3 +18,5 @@ RUN apk add --no-cache go \
 
 # Drop to non-root
 USER 10001:10001
+ 
+CMD ["/llm-caller"]

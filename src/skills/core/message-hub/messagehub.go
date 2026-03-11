@@ -110,6 +110,13 @@ func handleSkill(conn net.Conn) {
 }
 
 func routeMessage(msg Message) {
+	// if msg.To is message-hub, that means us and we should handle that message instead of routing it.
+	if msg.To == "message-hub" {
+		log.Println("Handling message for message-hub:", msg)
+		// FIXME: implement handling logic
+		return
+	}
+
 	mu.Lock()
 	target, ok := connections[msg.To]
 	mu.Unlock()
