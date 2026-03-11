@@ -58,16 +58,25 @@ All communication flows exclusively through `message-hub`. No skill ever touches
 - Registration metadata **must** now include:
   ```json
   {
-    "required_mounts": [...],
+    "name": "skill-name",
+    "required_mounts": ["sources:ro", "outputs:rw"],
     "network_policy": {
-      "outbound": "allow_list" | "none",
-      "domains": ["api.openai.com"],
-      "ports": [443]
+      "outbound": "none" | "allow_list",
+      "domains": ["api.example.com", "*.example.org"],
+      "ports": [443],
+      "network_mode": "seedclaw-net"          // MUST — never "host", "bridge", "none", etc.
     },
-    "network_needed": false   // default
+    "network_needed": false,
+    "hash": "sha256:................................................",
+    "timestamp": "2026-03-11T13:45:22Z",
+    "previous_hash": "sha256:................................................"
   }
   ```
-- Seedclaw rejects any skill that omits or violates this.
+- SeedClaw **MUST reject** any registration that:  
+  - omits any field above  
+  - uses `network_mode` ≠ `"seedclaw-net"`  
+  - sets `"outbound": "allow_list"` with empty `domains` array  
+  - declares mounts not explicitly allowed by the skill's declared `required_mounts`
 
 ---
 
@@ -97,6 +106,22 @@ This policy eliminates lateral movement, data exfiltration, and unexpected inter
 - Strict seccomp + cgroup2 limits (512 MiB, 30 s hard timeout)
 - Extra hosts & network config added **only** where declared
 
+```yaml
+network: seedclaw-net
+read_only: true
+tmpfs:
+  - /tmp
+cap_drop: [ALL]
+security_opt: [no-new-privileges:true]
+mem_limit: 512m
+cpu_shares: 512
+ulimits:
+  nproc: 64
+  nofile: 64
+restart: unless-stopped
+# extra_hosts: ["host.internal:host-gateway"]   # ONLY for message-hub
+```
+
 #### 4.7 Code Vetting Pipeline (mandatory)
 - `go vet`, compile test, static analysis.
 - New checks: reject `network_mode: host`, undeclared outbound calls, or broad network flags.
@@ -107,11 +132,12 @@ This policy eliminates lateral movement, data exfiltration, and unexpected inter
 ### 5. Auditing & Observability (EASY AUDITING)
 - Append-only JSON lines now include full network policy:
   ```json
-  {"ts":"2026-03-11T13:00:00Z","actor":"seedclaw","action":"register_skill","skill":"web-search","network_policy":{"outbound":"allow_list","domains":["*.brave.com"]},"mounts":[...],"hash":"sha256:...","status":"success"}
+  {"ts":"2026-03-11T13:00:00Z","actor":"seedclaw","action":"register_skill","skill":"web-search","network_policy":{"outbound":"allow_list","domains":["*.brave.com"]},"mounts":[...],"hash":"sha256:...","previous_hash":"sha256:...","status":"success"}
   ```
 - `compose.yaml` backups on every edit.
 - Registry JSON versioned and includes previous hash.
 - Central log shows exactly who can talk to whom and reach the internet.
+- **Audit writes**: Performed **only** by seedclaw binary. message-hub sends events over TCP — **no** audit filesystem mount on message-hub.
 
 ---
 

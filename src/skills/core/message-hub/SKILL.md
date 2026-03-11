@@ -27,7 +27,7 @@ Sole IPC router and control plane gateway for the entire SeedClaw swarm. Enforce
 - network_mode: seedclaw-net (host forbidden).
 
 ## Required Mounts
-Minimal/none for control plane (TCP only). Seedclaw adds **no** broad shared/ mounts. If audit logging requires filesystem, use narrow shared/audit:rw ONLY (declared above as [] by default; seedclaw overrides with audit only if needed).
+Minimal/none for control plane (TCP only). Seedclaw adds **no** broad shared/ mounts.
 
 ## Default Container Runtime Profile
 Fully compliant with ARCHITECTURE.md v2.1: read_only: true, tmpfs: [/tmp], cap_drop: [ALL], security_opt: [no-new-privileges:true], mem_limit: 512m, cpu_shares: 512, network: seedclaw-net, no host network ever.
@@ -51,11 +51,15 @@ Hub validates `from`, routes to `to`, appends audit entry.
 Forwarded with validation.
 
 ## Security & Auditing Invariants (NON-NEGOTIABLE)
-- Immutable audit logging of EVERY routed message (actor, action, from, to, network_decision, hash) to shared/audit/seedclaw.log.
+- Immutable audit logging of EVERY routed message performed **exclusively by seedclaw binary** after receiving structured events over TCP
 - Enforces skill isolation and zero direct networking.
-- Trivial auditing guarantee: `grep -E '"message-hub|network_policy|outbound"' shared/audit/seedclaw.log` reveals all traffic.
+- Trivial auditing guarantee: `grep -E '"network_policy|outbound|domains|network_mode"' shared/audit/seedclaw.log` reveals all traffic.
 - Rejects any message attempting undeclared networking or bypassing hub.
 - Serves as contract for coder skill: ALL generated skills MUST route exclusively via message-hub.
 - Least-privilege only. Any violation → registration rejection by seedclaw.
+
+## Audit Logging
+Message-hub **never** writes directly to disk.  
+It sends structured audit events via the TCP control channel to seedclaw, which appends to `./shared/audit/seedclaw.log` and maintains SHA-256 hash chaining (`previous_hash` field).
 
 This SKILL.md is the binding specification for v2.1 compliance.

@@ -27,12 +27,14 @@ Only purpose-driven subdirectories are ever mounted. **Control channel is now pu
 - `sources/` — read-only AI-generated source code & templates  
 - `builds/` — temporary compilation workspaces + binaries  
 - `outputs/` — skill-produced artifacts  
+- `ollama/models/` — persistent model storage for ollama skill (rw for ollama only)  
 - `logs/` — centralized operational logs  
 - `audit/` — immutable append-only trail (JSON + hash-chained)
 
 **Mount strategy (security invariant):**  
 - No skill ever receives the entire `shared/` directory.  
 - `coder` receives only `sources:ro` + `builds:rw`.  
+- `ollama` receives `ollama/models:rw` — no other skill receives this mount.
 - Future skills declare exact required subdirs in registration metadata; seedclaw adds **only** those lines to `compose.yaml`.  
 - `message-hub` receives **no** control-related mounts (TCP only).
 
@@ -74,21 +76,26 @@ Must ship:
 
 ```json
 {
-  "name": "web-search",
+  "name": "skill-name",
   "required_mounts": ["sources:ro", "outputs:rw"],
   "network_policy": {
-    "outbound": "allow_list" | "none",
-    "domains": ["*.brave.com", "api.openai.com"],
+    "outbound": "none" | "allow_list",
+    "domains": ["api.example.com", "*.example.org"],
     "ports": [443],
-    "network_mode": "seedclaw-net"   // never "host"
+    "network_mode": "seedclaw-net"          // MUST — never "host", "bridge", "none", etc.
   },
   "network_needed": false,
-  "hash": "sha256:...",
-  "timestamp": "2026-03-11T13:00:00Z"
+  "hash": "sha256:................................................",
+  "timestamp": "2026-03-11T13:45:22Z",
+  "previous_hash": "sha256:................................................"
 }
 ```
 
-Seedclaw **rejects** any registration missing or violating this schema. Coder skill prompts will be updated to always produce it.
+SeedClaw **MUST reject** any registration that:  
+- omits any field above  
+- uses `network_mode` ≠ `"seedclaw-net"`  
+- sets `"outbound": "allow_list"` with empty `domains` array  
+- declares mounts not explicitly allowed by the skill's declared `required_mounts`
 
 ## Networking Architecture & Policy (NEW – Critical Section)
 
@@ -161,13 +168,18 @@ Host (metal)
 - Broad host exposure → eliminated by selective mounts + TCP control.  
 - Audit tampering → append-only + SHA-256 chaining (future).
 
-**Trivial auditing guarantee:** `grep -E '"network_policy|outbound|domains"' shared/audit/seedclaw.log` shows exactly what connectivity exists on the entire swarm.
+**Trivial auditing guarantee:** `grep -E '"network_policy|outbound|domains|network_mode"' shared/audit/seedclaw.log` shows exactly what connectivity exists on the entire swarm.
 
 ## Auditing & Observability
 
+**Audit trail implementation (v2.1 hardened):**  
+All entries are written **exclusively by the seedclaw host binary** to `./shared/audit/seedclaw.log` (append-only JSON Lines).  
+`message-hub` sends structured audit events over the TCP control channel — it **never** receives a filesystem mount for audit logging.  
+Every entry includes `previous_hash` for SHA-256 chaining (tamper-evident).
+
 Every significant action is a JSON line:
 ```json
-{"ts":"2026-03-11T13:00:00Z","actor":"seedclaw","action":"register_skill","skill":"web-search","network_policy":{...},"mounts":[...],"hash":"sha256:...","status":"success"}
+{"ts":"2026-03-11T13:00:00Z","actor":"seedclaw","action":"register_skill","skill":"web-search","network_policy":{...},"mounts":[...],"hash":"sha256:...","previous_hash":"sha256:...","status":"success"}
 ```
 
 `compose.yaml` is backed up before every edit. Registry is versioned.

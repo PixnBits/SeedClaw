@@ -30,14 +30,15 @@
      "name": "skill-name",
      "required_mounts": ["sources:ro", "outputs:rw"],
      "network_policy": {
-       "outbound": "allow_list" | "none",
-       "domains": ["api.example.com"],
+       "outbound": "none" | "allow_list",
+       "domains": ["api.example.com", "*.example.org"],
        "ports": [443],
        "network_mode": "seedclaw-net"
      },
      "network_needed": false,
-     "hash": "sha256:...",
-     "timestamp": "..."
+     "hash": "sha256:................................................",
+     "timestamp": "2026-03-11T13:45:22Z",
+     "previous_hash": "sha256:................................................"
    }
    ```
    Coder skill (generated later) must always produce this. Seedclaw rejects anything missing or invalid.
@@ -75,7 +76,7 @@
 
 **On Startup Sequence** (hardcoded):
 - Verify Docker.
-- mkdir -p ./shared/{sources,builds,outputs,logs,audit}
+- mkdir -p ./shared/{sources,builds,outputs,logs,audit,ollama/models}
 - Create `seedclaw-net` if missing.
 - Load or init registry.json and audit.log.
 - Generate/overwrite initial compose.yaml with the four core skills (message-hub, llm-caller, ollama, coder) from `./src/skills/core/*/Dockerfile` paths. Apply Default Profile + narrow outbound for llm-caller/ollama.

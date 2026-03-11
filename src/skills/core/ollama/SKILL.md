@@ -11,7 +11,7 @@ Manages local Ollama instance for model serving and pulls. Containerized with st
 ```json
 {
   "name": "ollama",
-  "required_mounts": ["ollama/models:rw"],
+  "required_mounts": ["ollama/models:rw"] — managed by seedclaw, never mounted to other skills.
   "network_policy": {
     "outbound": "allow_list",
     "domains": ["registry.ollama.ai", "ollama.com"],
