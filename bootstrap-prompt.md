@@ -2,20 +2,20 @@
 
 You are the Lead Security Architect and Principal Go Engineer for SeedClaw v2.1.2.
 
-Your sole task is to generate the seedclaw binary and the five core skills exactly as described in:
+Your sole task is to implement the seedclaw binary and the five core skills exactly as described in:
 
 - ARCHITECTURE.md v2.1
 - PRD.md v2.1
 - src/seedclaw/SKILL.md
 - src/skills/core/*/SKILL.md  (coder, llm-caller, message-hub, ollama, user-agent)
 
-These documents are the **single source of truth**. Deviate = security violation.
+These documents are the single source of truth. Any deviation is a security violation.
 
-**Critical invariants – enforce in code + comments:**
+**Critical invariants – enforce in code + extensive comments:**
 
-1. TCP control plane = 127.0.0.1:7124 only (or SEEDCLAW_CONTROL_PORT), JSON-over-TCP, no unix socket, no websocket, no HTTP.
-2. Only message-hub may connect (validate source IP / host.internal alias).
-3. Every container MUST use network: seedclaw-net. **Reject forever** network_mode: host / host-network / none.
+1. TCP control plane = 127.0.0.1:7124 only (or SEEDCLAW_CONTROL_PORT env), JSON-over-TCP, no unix socket, no websocket, no HTTP.
+2. Only message-hub may connect (validate source using host.internal alias or gateway IP).
+3. Every container MUST use network: seedclaw-net. Permanently reject network_mode: host / host-network / bridge-default / none.
 4. Apply this exact default runtime profile to EVERY service in compose.yaml:
 
 ```yaml
@@ -30,32 +30,45 @@ ulimits:
   nproc: 64
   nofile: 64
 restart: unless-stopped
+# extra_hosts: ["host.internal:host-gateway"]   # only for message-hub
 ```
 
-5. Audit writes → **exclusively** by seedclaw binary to shared/audit/seedclaw.log (append-only JSONL + previous_hash SHA-256 chaining). message-hub sends events via TCP — **never** mounts audit dir.
-6. Reject any registration missing network_policy, using wrong network_mode, or allow_list without domains.
-7. Atomic compose.yaml edits (backup before write).
-8. Panic + audit entry + clear error on any invariant violation.
+5. Audit writes → exclusively by seedclaw binary to shared/audit/seedclaw.log (append-only JSONL + SHA-256 previous_hash chaining). message-hub sends events via TCP — never mounts audit dir.
+6. Reject any skill registration missing network_policy, using wrong network_mode, or allow_list without non-empty domains array.
+7. Atomic compose.yaml edits: backup before write (copy to compose.yaml.bak.timestamp).
+8. Panic + write audit entry + clear stderr message on any invariant violation.
 
-**New v2.1.1 / v2.1.2 requirements:**
+**v2.1.1 / v2.1.2 user-facing requirements:**
 
-- Thin STDIN/STDOUT bridge: read lines from os.Stdin → send JSON to user-agent via message-hub → print replies from user-agent to os.Stdout.
-- Generate user-agent skill that enforces the **exact** 2-phase paranoid safety loop described in src/skills/core/user-agent/SKILL.md v2.1.2.
+- Thin bidirectional STDIN/STDOUT REPL bridge:
+  - Read non-empty lines from os.Stdin
+  - Wrap each as JSON {"from":"user", "to":"user-agent", "content":{"action":"user_request", "prompt":line}}
+  - Send via existing TCP connection to message-hub
+  - Print every message received where "from" == "user-agent" to os.Stdout
+- user-agent must enforce the exact 2-phase paranoid safety loop (threat-model first, explicit YES/NO for risky actions) described in src/skills/core/user-agent/SKILL.md v2.1.2
 
-**Input files you can reference:**
+**Instructions for this editor session:**
 
-- src/seedclaw/SKILL.md
-- src/skills/core/{coder,llm-caller,message-hub,ollama,user-agent}/SKILL.md
+If you are running inside VS Code, Cursor, Aider, Continue.dev or similar agentic coding environment:
 
-**Output files – exact paths:**
+- Do NOT output fenced code blocks.
+- Instead, directly create / overwrite the following files on disk in their correct locations relative to the project root:
+  - src/seedclaw/go.mod
+  - src/seedclaw/seedclaw.go          (include extensive invariant-enforcing comments)
+  - src/skills/core/coder/Dockerfile
+  - src/skills/core/coder/coder.go
+  - src/skills/core/llm-caller/Dockerfile
+  - src/skills/core/llm-caller/llmcaller.go
+  - src/skills/core/message-hub/Dockerfile
+  - src/skills/core/message-hub/messagehub.go
+  - src/skills/core/ollama/Dockerfile
+  - src/skills/core/ollama/ollama.go
+  - src/skills/core/user-agent/Dockerfile
+  - src/skills/core/user-agent/useragent.go     (must hard-code the immutable safety prompt)
 
-- src/seedclaw/
-  - go.mod
-  - seedclaw.go           (extensive invariant comments!)
-- src/skills/core/{coder,llm-caller,message-hub,ollama,user-agent}/
-  - Dockerfile
-  - {skill-name}.go
+- If any helper files are needed (types.go, audit.go, etc.), place them in src/seedclaw/
+- After writing files, print a short confirmation message listing exactly which files were created/updated.
 
-Generate **only** the requested files.
+If you are in a plain chat interface without filesystem access, fall back to fenced code blocks with path comments at the top of each block.
 
-Begin generation now.
+Enforce ALL invariants listed above. Begin generation now.
