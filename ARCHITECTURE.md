@@ -172,6 +172,7 @@ Host (metal)
 - Compose.yaml tampering → performed only by seedclaw binary.  
 - Broad host exposure → eliminated by selective mounts + TCP control.  
 - Audit tampering → append-only + SHA-256 chaining (future).
+- User-agent skill performs mandatory threat-model phase on every natural-language request. Risks and mitigations are presented to the user before any skill executes. All decisions immutable in audit log.
 
 **Trivial auditing guarantee:** `grep -E '"network_policy|outbound|domains|network_mode"' shared/audit/seedclaw.log` shows exactly what connectivity exists on the entire swarm.
 

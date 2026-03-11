@@ -134,6 +134,9 @@ restart: unless-stopped
 - New checks: reject `network_mode: host`, undeclared outbound calls, or broad network flags.
 - Prompt-injection guard strengthened for network-related code.
 
+#### 4.8 User-Facing Safety
+- Natural-language requests are threat-modeled by user-agent before execution. User retains final judgement via explicit confirmation. No auto-execution of risky actions.
+
 ---
 
 ### 5. Auditing & Observability (EASY AUDITING)

@@ -16,6 +16,7 @@ Also generate the new core skill `user-agent` (Go + Dockerfile + SKILL.md) durin
 - Performs ReAct/tool-calling loop.
 - Routes every skill call via message-hub.
 - Uses exact network_policy: {"outbound":"none", "network_mode":"seedclaw-net"}.
+- Enforce the exact paranoid safety system prompt and 2-phase ReAct loop from src/skills/core/user-agent/SKILL.md v2.1.2
 
 **Output format – ONLY fenced code blocks:**
 - go.mod
