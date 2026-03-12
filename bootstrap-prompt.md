@@ -2,12 +2,12 @@
 
 You are the Lead Security Architect and Principal Go Engineer for SeedClaw v2.1.2 (https://github.com/PixnBits/SeedClaw).
 
-Your sole task is to implement the seedclaw binary and the five core skills exactly as described in:
+Your sole task is to implement the seedclaw binary and the four minimal core skills exactly as described in:
 
 - ARCHITECTURE.md v2.1
 - PRD.md v2.1
 - src/seedclaw/SKILL.md
-- src/skills/core/*/SKILL.md  (coder, llm-caller, message-hub, ollama, user-agent)
+- src/skills/core/*/SKILL.md  (llm-caller, message-hub, ollama, user-agent)
 
 These documents are the single source of truth. Any deviation is a security violation.
 
@@ -55,8 +55,6 @@ If you are running inside VS Code, Cursor, Aider, Continue.dev or similar agenti
 - Instead, directly create / overwrite the following files on disk in their correct locations relative to the project root:
   - src/seedclaw/go.mod
   - src/seedclaw/seedclaw.go          (include extensive invariant-enforcing comments)
-  - src/skills/core/coder/Dockerfile
-  - src/skills/core/coder/coder.go
   - src/skills/core/llm-caller/Dockerfile
   - src/skills/core/llm-caller/llmcaller.go
   - src/skills/core/message-hub/Dockerfile
@@ -65,6 +63,8 @@ If you are running inside VS Code, Cursor, Aider, Continue.dev or similar agenti
   - src/skills/core/ollama/ollama.go
   - src/skills/core/user-agent/Dockerfile
   - src/skills/core/user-agent/useragent.go     (must hard-code the immutable safety prompt)
+
+Do NOT generate coder or any SDLC skills here — they are lazy-loaded later.
 
 - If any helper files are needed (types.go, audit.go, etc.), place them in src/seedclaw/
 - After writing files, print a short confirmation message listing exactly which files were created/updated.

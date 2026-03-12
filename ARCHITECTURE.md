@@ -1,6 +1,6 @@
 # SeedClaw Architecture
 
-**Version:** 2.1 (2026-03-11)  
+**Version:** 2.2 (2026-03-11)  
 **Status:** Hardened bootstrap phase – TCP control plane + mandatory explicit networking policy  
 **Alignment:** 100% with PRD.md v2.1 (single source of truth for every line of code, every compose.yaml edit, every skill registration)
 
@@ -60,13 +60,19 @@ Only purpose-driven subdirectories are ever mounted. **Control channel is now pu
 - Enforces structured JSON, sender validation, and routes **everything** (skill↔skill, skill↔seedclaw).  
 - Logs every message to audit trail.
 
-### Core Bootstrap Skills (committed – updated SKILL.md forthcoming)
-- `message-hub` – TCP control only.  
-- `llm-caller` – explicit outbound allow-list (OpenAI, Anthropic, Grok, etc.).  
-- `ollama` – explicit outbound for model pulls.  
-- `coder` – generates skills **including** mandatory `network_policy`.
+### Core Bootstrap Skills (committed – auto-started on first run)
+- `message-hub` – TCP control only.
+- `llm-caller` – explicit outbound allow-list (approved LLM providers only).
+- `ollama` – explicit outbound for model pulls + persistent models mount.
+- `user-agent` – paranoid threat-model-first ReAct loop, outbound: none.
 
-### Generated Skills (all future skills)
+### Reference / On-Demand Skills (committed in repo, generated & registered lazily)
+- `coder` – skill & code generator (first most users request)
+- `git` – local version control for generated artifacts
+- `memory-reflection` – episodic & long-term memory + pre-git archive
+- `critic` – output verification & security/self-critique
+- `planner`, `retry-orchestrator`, `self-mod`, … (SDLC & evolution family)
+
 Must ship:
 - `SKILL.md` (prompt template)  
 - Go main + `Dockerfile`  
@@ -96,6 +102,8 @@ SeedClaw **MUST reject** any registration that:
 - uses `network_mode` ≠ `"seedclaw-net"`  
 - sets `"outbound": "allow_list"` with empty `domains` array  
 - declares mounts not explicitly allowed by the skill's declared `required_mounts`
+
+All on-demand skills (coder, git, etc.) **must** still declare full `network_policy` — default `"outbound": "none"` unless explicitly justified and narrow.
 
 ## Networking Architecture & Policy (NEW – Critical Section)
 

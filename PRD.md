@@ -1,4 +1,4 @@
-**Improved Product Requirements Document (PRD) – Version 2.1**  
+**Improved Product Requirements Document (PRD) – Version 2.2**  
 **Date:** 2026-03-11  
 **Status:** Bootstrap phase – hardened control plane + strict networking isolation  
 **Owner:** Lead Product Owner (with Harper, Benjamin & Lucas input)
@@ -51,6 +51,14 @@ All communication flows exclusively through `message-hub`. No skill ever touches
 - Logs every routed message to central audit trail.
 
 #### 3.3 Core Bootstrap Skills
+Must be started automatically on `./seedclaw` first run:
+- `message-hub`
+- `llm-caller`
+- `ollama`
+- `user-agent`
+
+All other skills (coder, git, memory-reflection, critic, planner, …) are **reference implementations** in `./src/skills/`. They are **not** started until explicitly generated and registered via natural-language request to `user-agent` (which will threat-model the generation request as MEDIUM/HIGH risk).
+
 - Must match their `SKILL.md` contracts.  
 - `llm-caller` and `ollama` receive explicit outbound allow-lists (only the domains/ports they need). All other skills default to zero outbound.
 
@@ -77,6 +85,12 @@ All communication flows exclusively through `message-hub`. No skill ever touches
   - uses `network_mode` ≠ `"seedclaw-net"`  
   - sets `"outbound": "allow_list"` with empty `domains` array  
   - declares mounts not explicitly allowed by the skill's declared `required_mounts`
+
+**3.4.1 Lazy SDLC Toolchain bootstrapping**
+- The `coder` skill is **not** part of the initial swarm.
+- When the user requests code/skill/tool generation, `user-agent` threat-models it → shows explicit warning → on YES routes a carefully constrained generation prompt to `llm-caller` (using a strong model like `nemotron-3-nano:30b-a3b-q4_K_M`).
+- The generated bundle is vetted/registered normally → swarm now has permanent `coder`.
+- Subsequent SDLC skills (`git`, `critic`, etc.) are then generated via the now-available `coder`.
 
 #### 3.5 User Interface
 - `./seedclaw` (no flags) starts daemon + thin STDIN/STDOUT REPL.

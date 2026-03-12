@@ -76,10 +76,30 @@ Start SeedClaw (first run will pull/build core containers):
 You should see:
 
 - Docker network `seedclaw-net` created
-- Core skills starting (`message-hub`, `llm-caller`, `ollama`, `coder`, `user-agent`)
+- Minimal core skills starting (`message-hub`, `llm-caller`, `ollama`, `user-agent`)
 - Prompt appears: `>`
 
-### Step 4 – First interactions (examples)
+### Step 4 – First interactions (recommendations)
+
+**Enable code generation (most common first action)**
+
+```
+> Please create a skill called "coder" that can generate new Go-based skills following the SeedClaw architecture rules in ARCHITECTURE.md and PRD.md.
+```
+
+→ user-agent threat-models (MEDIUM risk: executable code generation) → shows concerns + "PROCEED? (YES/NO)"  
+→ type YES  
+→ temporary bootstrap generation runs → coder skill registers & starts  
+→ from now on you can say `coder: generate a weather skill …`
+
+**Other early requests after coder exists**
+
+```
+> coder: create a git skill that commits generated artifacts using go-git
+> coder: build memory-reflection skill for long-term context
+```
+
+### Step 5 – Example tasks
 
 **Hello World in Go**
 
