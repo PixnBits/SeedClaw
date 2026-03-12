@@ -1,38 +1,134 @@
-# PlannerSkill Prompt
+# PlannerSkill v2.2 – Task Decomposition & Execution Planning
 
-You are generating **PlannerSkill** — a task decomposition and planning skill for complex goals in SeedClaw.
+**Status:** Reference / on-demand skill  
+**Generation path:** Normally created via `coder` skill (after it is bootstrapped)  
+**Single source of truth:** ARCHITECTURE.md v2.1+, PRD.md v2.1+, this file  
+**Must enforce** every v2.1+ invariant in its own behavior.
 
 ## Purpose
-- Break high-level user goals into ordered/parallel subtasks
-- Create executable plans (sequence or DAG of steps)
-- Re-plan on failure/reflection feedback
-- Route subtasks to appropriate skills via message hub
+- Decompose high-level natural-language goals or complex user requests into ordered, parallelizable, and conditionally dependent subtasks
+- Produce executable plans as structured DAGs or linear sequences
+- Assign subtasks to available skills (from live registry) or mark for escalation / user confirmation
+- Include contingency branches (on_failure, retry, reflect, escalate)
+- Support re-planning on feedback from CriticSkill, RetryOrchestratorSkill, or execution failures
+- Enable safe, auditable orchestration without ever executing code itself
 
-## Strict Rules
-1. Use stdlib only; represent plans as JSON structs (tasks with deps, assignees)
-2. Input via stdin JSON: goal description, available skills (from registry or registration messages)
-3. Output plan: list of steps with "task", "description", "depends_on" [], "assigned_to" skill name or "hub"
-4. Support sequential + parallel (no deps = parallel)
-5. Include contingency: "on_failure" actions (retry, reflect, escalate)
-6. Use ReAct-style thinking: Thought → Subtasks → Assignment
-7. Register on startup; forward plans via stdout messages
-
-## Output JSON Format
-
+## Network Policy (v2.1+ Mandatory – NON-NEGOTIABLE)
 ```json
 {
-  "skill_name": "PlannerSkill",
-  "description": "Decomposes goals into subtasks, creates plans, routes to skills",
-  "prompt_template": "You are PlannerSkill. Break goals into steps, assign to skills, re-plan on feedback.",
-  "go_package": "main",
-  "source_code": "... complete Go code ...",
-  "binary_name": "planner",
-  "build_flags": ["-trimpath", "-ldflags=-s -w"],
-  "tests_included": true,
-  "test_command": "go test -v ./..."
+  "name": "planner",
+  "required_mounts": ["plans:rw?"],
+  "network_policy": {
+    "outbound": "none",
+    "domains": [],
+    "ports": [],
+    "network_mode": "seedclaw-net"
+  },
+  "network_needed": false
 }
 ```
+Zero outbound connectivity forever. PlannerSkill **never** makes network calls.
 
-Generate implementation that parses goal, outputs structured plan JSON via messages + tests (decompose simple/complex goals).
+## Required Mounts
+`["plans:rw"]` (optional – MVP can be `[]`)  
+- Purpose: append-only storage of generated plans for audit, replay, or long-term reflection (`./shared/plans/history.jsonl`)  
+- If persistence is not required initially, omit the mount entirely  
+- Seedclaw creates `./shared/plans` only if requested and mounts it **exclusively** to this skill  
+- No access to `sources/`, `builds/`, `outputs/`, `audit/`, `memory/`, `git-repo/`, `critiques/`, or any other shared path  
+- Invariant: plans cannot tamper with code, git history, memory archive, or audit trail
 
-Example high-value task: "After generating GitSkill, retrieve all pre-git generated skills from MemoryReflectionSkill and commit them via GitSkill"
+## Default Container Runtime Profile
+Every service definition generated for planner **MUST** inherit:
+```yaml
+network: seedclaw-net
+read_only: true
+tmpfs:
+  - /tmp
+cap_drop: [ALL]
+security_opt: [no-new-privileges:true]
+mem_limit: 512m
+cpu_shares: 512
+ulimits:
+  nproc: 64
+  nofile: 64
+restart: unless-stopped
+# no extra_hosts needed
+```
+Exception (if persistence enabled): the `plans:rw` mount overrides read-only rootfs for that path only.
+
+## Communication (Strict – hub-only)
+**ALL** input/output routed exclusively through `message-hub` using structured JSON protocol.  
+No direct filesystem access to host control plane, no direct TCP to seedclaw.
+
+**Supported incoming message types:**
+- `plan` (primary)  
+  payload:  
+  ```json
+  {
+    "goal": "string – high-level objective",
+    "context?": "string – additional background",
+    "available_skills": ["array of skill names from registry"],
+    "constraints?": ["array e.g. 'no outbound unless allow_list', 'low risk only', ...],
+    "max_steps?": number,
+    "task_id?": "correlation id"
+  }
+  ```
+- `replan`  
+  payload: `{ previous_plan_id, feedback: string|object, new_goal? }`
+
+**Outgoing messages:**
+- `plan_result`  
+  ```json
+  {
+    "plan_id": "uuid-or-timestamp",
+    "goal": "...",
+    "steps": [
+      {
+        "step_id": 1,
+        "task": "short title",
+        "description": "detailed instruction",
+        "assigned_to": "skill-name | user-agent | escalate",
+        "depends_on": [step_ids],
+        "parallel": boolean,
+        "on_failure": ["retry", "reflect", "escalate", "abort"],
+        "risk_level": "LOW|MEDIUM|HIGH",
+        "requires_confirmation": boolean
+      }
+    ],
+    "contingencies": [...],
+    "estimated_risk": "LOW|MEDIUM|HIGH",
+    "recommendation": "proceed|refine|reject"
+  }
+  ```
+
+## Internal Behavior & Security Invariants
+- **Planning logic:** deterministic decomposition + simple heuristics first (no external LLM call from Planner in MVP)  
+  - Identify security-sensitive steps (code gen, network, file write) → mark `risk_level: HIGH`, `requires_confirmation: true`
+  - Prefer routing high-risk steps through user-agent → critic loop
+  - Enforce SeedClaw invariants in plan: no direct skill-to-skill comms, hub-only routing, explicit mounts/network_policy in generated skills
+- **Re-planning:** on receiving failure/reflection feedback, adjust dependencies, re-assign, or insert safety gates
+- **Persistence (optional via env var `PLANNER_PERSISTENCE=true`):**
+  - Append full plan JSON to `/data/history.jsonl` (matches mount)
+  - Append-only — never modify or delete
+  - 0600 permissions
+- All operations wrapped in `context.WithTimeout(30 * time.Second)`
+- Validate incoming payloads: reject malformed JSON, missing goal, oversized context (>256KB)
+- Run as non-root user inside container
+- Never execute any assigned task — only produce plan
+- If plan includes HIGH-risk steps without clear mitigation → set `recommendation: "refine"` or `"escalate"`
+
+## Recommended Generation Prompt Excerpt (for coder skill)
+"You are generating PlannerSkill — task decomposition into structured, auditable plans for SeedClaw swarm. Zero outbound networking. Optional plans:rw mount for append-only history. Produce DAG/linear plans with skill assignments, dependencies, failure contingencies, risk levels. Mark high-risk steps for user confirmation. Enforce all SeedClaw v2.1+ invariants: hub-only routing, least-privilege, security-first decomposition."
+
+## Trivial Audit Guarantee
+After registration:
+```bash
+grep -E '"planner"|network_policy|outbound|mounts|plans:' shared/audit/seedclaw.log
+```
+shows exactly:
+- zero outbound ever granted
+- at most one narrow writable mount (`plans:rw`) or none
+- no host network or broad shared/ exposure
+
+This SKILL.md is the binding contract for v2.2 compliance.  
+Any generated code that violates networking, mount, hub-only, or planning invariants **must** be rejected during sandbox vetting by seedclaw.

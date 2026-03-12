@@ -1,40 +1,123 @@
-# GitSkill Prompt
+# GitSkill v2.2 – Local Version Control for Generated Artifacts
 
-You are generating **GitSkill** — a secure, local-only version control skill for tracking generated skills in SeedClaw.
+**Status:** Reference / on-demand skill  
+**Generation path:** Normally created via `coder` skill after it is bootstrapped  
+**Single source of truth:** ARCHITECTURE.md v2.1+, PRD.md v2.1+, this file  
+**Must enforce** every v2.1+ invariant in generated registrations and in its own behavior.
 
 ## Purpose
-- Commit generated skill artifacts (source code, prompt template, binary hash, metadata) to a local git repo
-- Support basic ops: init repo, commit, log, diff, branch, checkout/rollback
-- Bulk commit pre-git archived skills from MemoryReflectionSkill on first use
-- Enable SDLC: track changes, allow CriticSkill to review diffs before commit
+- Provide safe, local-only git version control for all generated skills and artifacts
+- Commit individual skills immediately after registration (triggered by MemoryReflectionSkill "store" event or direct message)
+- Support bulk commit of pre-git archived skills from MemoryReflectionSkill on first initialization
+- Enable SDLC traceability: commit messages include skill name, model used, prompt hash/timestamp, etc.
+- Allow basic operations: log, diff, branch, checkout (rollback), status — all exposed via structured messages
 
-## Strict Rules
-1. Use only pure-Go git lib: github.com/go-git/go-git (no os/exec("git")).
-2. Repo path from env var GIT_REPO_DIR (default /tmp/seedclaw-skills-repo); init if missing.
-3. Input via stdin JSON messages: type "commit" with payload {skill_name, source_code, prompt_template, binary_hash, metadata: {prompt_used, llm_model, timestamp, dependencies}}
-4. For bulk: on startup, send "retrieve" to MemoryReflectionSkill (category: "generated_skill", all) → receive batch → commit each as separate file (e.g., skills/{name}.go, {name}.prompt.md, {name}.meta.json)
-5. Commit message: "Generated {skill_name} via {llm_model} - {metadata summary}"
-6. No remote pushes — local-only forever.
-7. Register on startup with {"type":"register","payload":{"name":"GitSkill"}}
-8. Sandbox invariants: readonly mounts except for repo dir volume; no network.
-9. After first bulk commit, send "event" to SelfModSkill: "git_repo_initialized" for potential evolutions.
-
-## Output JSON Format
-
-Respond **only** with:
-
+## Network Policy (v2.1+ Mandatory – NON-NEGOTIABLE)
 ```json
 {
-  "skill_name": "GitSkill",
-  "description": "Local git version control for generated skills; bulk commits from memory",
-  "prompt_template": "You are GitSkill. Commit skills safely, track changes, enable rollbacks.",
-  "go_package": "main",
-  "source_code": "... complete Go code including main + _test.go ...",
-  "binary_name": "gitskill",
-  "build_flags": ["-trimpath", "-ldflags=-s -w"],
-  "tests_included": true,
-  "test_command": "go test -v ./..."
+  "name": "git",
+  "required_mounts": ["git-repo:rw"],
+  "network_policy": {
+    "outbound": "none",
+    "domains": [],
+    "ports": [],
+    "network_mode": "seedclaw-net"
+  },
+  "network_needed": false
 }
 ```
+Zero outbound connectivity. GitSkill **never** attempts remote operations (push, fetch, clone from URL). Local repository only.
 
-Generate full implementation: use go-git for ops, listen for messages, handle bulk from memory on init + tests (mock commits, diff, rollback).
+## Required Mounts
+`["git-repo:rw"]`  
+- Purpose: dedicated subdirectory for the git working tree and `.git` directory  
+- Seedclaw creates `./shared/git-repo` if missing and mounts it **only** to this skill  
+- No access to `sources/`, `builds/`, `outputs/`, `audit/`, or any other shared subdirectory  
+- Mount strategy preserves audit invariant: git history cannot tamper with audit log or source code directories
+
+## Default Container Runtime Profile
+Every service definition generated for git **MUST** inherit:
+```yaml
+network: seedclaw-net
+read_only: true
+tmpfs:
+  - /tmp
+cap_drop: [ALL]
+security_opt: [no-new-privileges:true]
+mem_limit: 512m
+cpu_shares: 512
+ulimits:
+  nproc: 64
+  nofile: 64
+restart: unless-stopped
+# no extra_hosts needed
+```
+Exception: the `git-repo:rw` mount overrides read-only rootfs for that path only.
+
+## Communication (Strict – hub-only)
+**ALL** input/output routed exclusively through `message-hub` using structured JSON protocol.  
+No direct filesystem access to host control plane, no direct TCP to seedclaw.
+
+**Supported message types (incoming):**
+- `commit` – single skill commit  
+  payload: `{ skill_name, source_code, prompt_template, binary_hash, metadata: {prompt_used_hash?, llm_model, timestamp, dependencies?} }`
+- `bulk_commit` – commit multiple archived skills  
+  payload: array of the above objects
+- `retrieve_log`, `diff`, `status`, `checkout` – query/rollback operations
+- `init` – (rare) force re-init if repo corrupted (high-risk, logged)
+
+**Outgoing messages:**
+- `commit_success` / `commit_failure` with commit hash, message, files changed
+- `log_result`, `diff_result`, etc.
+
+## Internal Behavior & Security Invariants
+- Use **only** `github.com/go-git/go-git/v5` (pinned, vendored if possible) — **no** `os/exec("git")`
+- Repository path from env var `GIT_REPO_DIR` (default `/data/repo`) — matches mounted volume
+- On startup / first message: check if repo exists → if not, `git.Init()` plain repository (no remote)
+- Commit strategy:
+  - Each skill stored in structured layout, e.g.:
+    - `skills/{skill_name}/main.go`
+    - `skills/{skill_name}/prompt.md`
+    - `skills/{skill_name}/metadata.json`
+    - `skills/{skill_name}/Dockerfile` (if applicable)
+  - Commit message format: `"Generated/Updated {skill_name} via {llm_model} – {short metadata summary}"`
+  - Author: `"SeedClaw Coder <coder@seedclaw.local>"`
+- Never add, commit or track files outside the skill directories
+- No `.gitignore` overrides that could accidentally include sensitive paths
+- All operations wrapped in short `context.WithTimeout(30 * time.Second)`
+- Run as non-root user inside container
+- Validate incoming payloads: reject malformed JSON, missing required fields, oversized content
+- Every commit success/failure → structured event sent back via hub (auditable)
+
+## Post-Initialization Hook
+After successful first bulk commit (or repo init), send structured event to hub:
+```json
+{
+  "from": "git",
+  "to": "message-hub",
+  "type": "event",
+  "payload": {
+    "category": "git_repo_initialized",
+    "repo_path": "/data/repo",
+    "initial_commit_count": N,
+    "timestamp": "..."
+  }
+}
+```
+Intended for SelfModSkill or future evolution components.
+
+## Recommended Generation Prompt Excerpt (for coder skill)
+"You are generating GitSkill — local-only git version control using go-git. Zero outbound networking. Mount only git-repo:rw. Commit generated skills from MemoryReflectionSkill archive. Support single & bulk commit, basic log/diff/rollback. Enforce all SeedClaw v2.1+ invariants."
+
+## Trivial Audit Guarantee
+After registration:
+```bash
+grep -E '"git"|network_policy|outbound|mounts|git-repo' shared/audit/seedclaw.log
+```
+shows exactly:
+- that git has zero outbound
+- only git-repo mount was granted
+- no host network ever appeared
+
+This SKILL.md is the binding contract for v2.2 compliance.  
+Any generated code that violates networking, mount, or hub-only rules **must** be rejected during sandbox vetting by seedclaw.
