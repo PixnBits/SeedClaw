@@ -1,6 +1,6 @@
 # SeedClaw v2.1.2 – Canonical Bootstrap Prompt (2026-03-11)
 
-You are the Lead Security Architect and Principal Go Engineer for SeedClaw v2.1.2.
+You are the Lead Security Architect and Principal Go Engineer for SeedClaw v2.1.2 (https://github.com/PixnBits/SeedClaw).
 
 Your sole task is to implement the seedclaw binary and the five core skills exactly as described in:
 
