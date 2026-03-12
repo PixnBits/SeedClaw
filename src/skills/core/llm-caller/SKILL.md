@@ -54,3 +54,8 @@ read_only: true, tmpfs: [/tmp], cap_drop: [ALL], security_opt: [no-new-privilege
 - Trivial audit via grep on outbound and domains.
 - Coder skill must copy this exact policy style when generating similar skills.
 - Immutable, least-privilege, hub-only routing enforced.
+
+## Implementation Wiring
+You MUST read and follow CORE_IMPLEMENTATION_PATTERNS.md verbatim before generating any code.
+Copy the exact skeletons where applicable.
+At the end of generation, output the filled compliance checklist from that file.

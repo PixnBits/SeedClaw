@@ -63,3 +63,8 @@ Message-hub **never** writes directly to disk.
 It sends structured audit events via the TCP control channel to seedclaw, which appends to `./shared/audit/seedclaw.log` and maintains SHA-256 hash chaining (`previous_hash` field).
 
 This SKILL.md is the binding specification for v2.1 compliance.
+
+## Implementation Wiring
+You MUST read and follow CORE_IMPLEMENTATION_PATTERNS.md verbatim before generating any code.
+Copy the exact skeletons where applicable.
+At the end of generation, output the filled compliance checklist from that file.

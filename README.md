@@ -64,7 +64,6 @@ cd ./src/seedclaw/
 go mod tidy
 go build -o ../../seedclaw seedclaw.go
 cd ../../
-chmod +x ./seedclaw
 ```
 
 Start SeedClaw (first run will pull/build core containers):

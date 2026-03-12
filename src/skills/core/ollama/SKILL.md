@@ -50,3 +50,8 @@ Exclusively via message-hub. Other skills call ollama only through hub. Internal
   }
 }
 ```
+
+## Implementation Wiring
+You MUST read and follow CORE_IMPLEMENTATION_PATTERNS.md verbatim before generating any code.
+Copy the exact skeletons where applicable.
+At the end of generation, output the filled compliance checklist from that file.

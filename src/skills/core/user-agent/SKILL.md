@@ -78,3 +78,8 @@ Exact profile from ARCHITECTURE.md (read_only, tmpfs /tmp, cap_drop ALL, mem_lim
 - Serves as contract for coder skill: any future orchestrator skill MUST include identical threat-model phase.
 
 This SKILL.md is the binding specification. Any generated user-agent.go that deviates is rejected at registration.
+
+## Implementation Wiring
+You MUST read and follow CORE_IMPLEMENTATION_PATTERNS.md verbatim before generating any code.
+Copy the exact skeletons where applicable.
+At the end of generation, output the filled compliance checklist from that file.

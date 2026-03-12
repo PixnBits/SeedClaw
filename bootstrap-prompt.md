@@ -11,6 +11,10 @@ Your sole task is to implement the seedclaw binary and the four minimal core ski
 
 These documents are the single source of truth. Any deviation is a security violation.
 
+You MUST read and follow CORE_IMPLEMENTATION_PATTERNS.md verbatim before generating any code.
+Copy the exact skeletons where applicable.
+At the end of generation, output the filled compliance checklist from that file.
+
 **Critical invariants – enforce in code + extensive comments:**
 
 1. TCP control plane = 127.0.0.1:7124 only (or SEEDCLAW_CONTROL_PORT env), JSON-over-TCP, no unix socket, no websocket, no HTTP.
