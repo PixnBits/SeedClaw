@@ -1,6 +1,6 @@
-# Coder Skill v2.1
+# Coder Skill v2.1.3
 
-Generates new skills compliant with SeedClaw ARCHITECTURE.md v2.1 and PRD.md v2.1. Uses qwen2.5-coder or equivalent.
+Generates new skills compliant with SeedClaw ARCHITECTURE.md v2.1 and PRD.md v2.1. Uses nemotron-3-nano:30b-q4_K_M (NVIDIA) or equivalent strong coding / agentic model.
 
 ## Capabilities
 - Reads SKILL.md templates
@@ -24,6 +24,9 @@ Generates new skills compliant with SeedClaw ARCHITECTURE.md v2.1 and PRD.md v2.
 - Zero internet outbound by default.
 - When generating skills: **MUST** embed correct network_policy (allow_list only when justified, never host network, default none).
 
+## Recommended Model for RTX 3060-class hardware (12 GB VRAM)
+`nemotron-3-nano:30b-q4_K_M` (NVIDIA). Runs via Ollama layer offloading; 16 GB+ VRAM recommended for full speed.
+
 ## Required Mounts
 ["sources:ro", "builds:rw"] only.
 
@@ -32,26 +35,3 @@ read_only: true, tmpfs /tmp, cap_drop ALL, mem_limit 512m, seedclaw-net only.
 
 ## Communication
 **ALL** LLM calls and skill registration route exclusively through message-hub. No direct access.
-
-## Message Format
-**Incoming:**
-```json
-{
-  "from": "sender",
-  "to": "coder",
-  "content": {
-    "action": "generate_skill",
-    "skill_name": "...",
-    "prompt": "..."
-  }
-}
-```
-**Outgoing:** Bundle with full metadata including network_policy.
-
-## Security & Auditing Invariants
-- Every generated skill MUST declare network_policy; seedclaw rejects violations.
-- Coder prompt (in generation) references this SKILL.md v2.1 as contract.
-- All actions (generation + compile) audited immutably.
-- Trivial auditing: grep network_policy shows exactly what connectivity every skill has.
-- Enforces zero-surprises, least-privilege, hub-only, no-host-network invariants in ALL output.
-- Dual-purpose: human doc + generation contract.

@@ -1,4 +1,4 @@
-# Ollama Skill v2.1
+# Ollama Skill v2.1.3
 
 Manages local Ollama instance for model serving and pulls. Containerized with strict isolation.
 
@@ -11,7 +11,7 @@ Manages local Ollama instance for model serving and pulls. Containerized with st
 ```json
 {
   "name": "ollama",
-  "required_mounts": ["ollama/models:rw"] — managed by seedclaw, never mounted to other skills.
+  "required_mounts": ["ollama/models:rw"],
   "network_policy": {
     "outbound": "allow_list",
     "domains": ["registry.ollama.ai", "ollama.com"],
@@ -23,11 +23,17 @@ Manages local Ollama instance for model serving and pulls. Containerized with st
 ```
 Outbound ONLY for model registry pulls. Blocked otherwise.
 
+## Resource Exception (audited, ollama-only)
+`mem_limit: 16g` + `shm_size: 1g` (required for 30 B models on consumer hardware; all other skills remain at 512 m).
+
+## Recommended Default Model for RTX 3060-class hardware
+`nemotron-3-nano:30b-q4_K_M` (NVIDIA)
+
 ## Required Mounts
 ["ollama/models:rw"] (for model storage; managed by seedclaw). No other shared/ access.
 
 ## Default Container Runtime Profile
-Compliant: read_only: true (except models tmpfs), cap_drop: [ALL], mem_limit: 512m, network: seedclaw-net.
+Compliant except the explicit mem_limit exception above: read_only: true (except models tmpfs), cap_drop: [ALL], mem_limit overridden for ollama only, network: seedclaw-net.
 
 ## Communication
 Exclusively via message-hub. Other skills call ollama only through hub. Internal serving on Docker network only.
@@ -40,14 +46,7 @@ Exclusively via message-hub. Other skills call ollama only through hub. Internal
   "to": "ollama",
   "content": {
     "action": "pull",
-    "model": "qwen2.5-coder:32b"
+    "model": "nemotron-3-nano:30b-q4_K_M"
   }
 }
 ```
-
-## Security & Auditing Invariants
-- Pull actions audited with domains in seedclaw.log.
-- No inter-skill direct access.
-- Model storage isolated.
-- Trivial grep auditing for any network activity.
-- Enforces v2.1 policy in all interactions.
